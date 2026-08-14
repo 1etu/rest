@@ -1,6 +1,7 @@
 #include "app/app.h"
 #include "core/timer.h"
 #include "notify/overlay.h"
+#include "ui/paint.h"
 #include "loc/strings.h"
 #include <windowsx.h>
 #include <dwmapi.h>
@@ -73,39 +74,6 @@ static BOOL set_acrylic(HWND w, int alpha)
     return swca(w, &d);
 }
 
-static void fill_round(HDC dc, int x, int y, int rw, int rh, int rad, COLORREF c, int a)
-{
-    BITMAPV5HEADER bh = {sizeof bh};
-    bh.bV5Width = rw;
-    bh.bV5Height = -rh;
-    bh.bV5Planes = 1;
-    bh.bV5BitCount = 32;
-    bh.bV5Compression = BI_RGB;
-    void *bits;
-    HDC m = CreateCompatibleDC(dc);
-    HBITMAP b = CreateDIBSection(0, (BITMAPINFO *)&bh, DIB_RGB_COLORS, &bits, 0, 0);
-    HGDIOBJ ob = SelectObject(m, b);
-    DWORD *p = (DWORD *)bits;
-    for (int yy = 0; yy < rh; yy++)
-        for (int xx = 0; xx < rw; xx++, p++) {
-            float fx = xx + 0.5f, fy = yy + 0.5f;
-            float qx = fx < rad ? rad - fx : fx > rw - rad ? fx - (rw - rad) : 0;
-            float qy = fy < rad ? rad - fy : fy > rh - rad ? fy - (rh - rad) : 0;
-            float cov = rad - sqrtf(qx * qx + qy * qy);
-            if (cov < 0) cov = 0;
-            if (cov > 1) cov = 1;
-            int aa = (int)(a * cov);
-            *p = (DWORD)aa << 24 | (DWORD)(GetRValue(c) * aa / 255) << 16 |
-                (DWORD)(GetGValue(c) * aa / 255) << 8 | (DWORD)(GetBValue(c) * aa / 255);
-        }
-    GdiFlush();
-    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    AlphaBlend(dc, x, y, rw, rh, m, 0, 0, rw, rh, bf);
-    SelectObject(m, ob);
-    DeleteObject(b);
-    DeleteDC(m);
-}
-
 static void blur_pass(DWORD *src, DWORD *dst, int bw, int bh, int horiz)
 {
     for (int y = 0; y < bh; y++)
@@ -125,65 +93,13 @@ static void blur_pass(DWORD *src, DWORD *dst, int bw, int bh, int horiz)
         }
 }
 
-static void blend_px(DWORD *p, COLORREF c, float a)
-{
-    if (a <= 0)
-        return;
-    if (a > 1) a = 1;
-    int br = (*p >> 16) & 255, bg = (*p >> 8) & 255, bb = *p & 255;
-    int r = (int)(br + (GetRValue(c) - br) * a);
-    int g = (int)(bg + (GetGValue(c) - bg) * a);
-    int b = (int)(bb + (GetBValue(c) - bb) * a);
-    *p = (DWORD)r << 16 | (DWORD)g << 8 | b;
-}
-
-static void draw_ring(screen *s, float frac)
-{
-    int fw = s->face_rc.right - s->face_rc.left, fh = s->face_rc.bottom - s->face_rc.top;
-    float cx = fw / 2.0f, cy = fh / 2.0f;
-    float mid = (float)s->ring_r, half = s->ring_t / 2.0f;
-    float lo = mid - half - 1, hi = mid + half + 1;
-    float span = frac * TAU;
-    DWORD *bits = (DWORD *)s->facebits;
-
-    for (int y = 0; y < fh; y++) {
-        float dy = y + 0.5f - cy;
-        if (dy < -hi || dy > hi)
-            continue;
-        DWORD *row = bits + y * fw;
-        for (int x = 0; x < fw; x++) {
-            float dx = x + 0.5f - cx;
-            float d2 = dx * dx + dy * dy;
-            if (d2 < lo * lo || d2 > hi * hi)
-                continue;
-            float d = sqrtf(d2);
-            float cov = half + 0.5f - fabsf(d - mid);
-            if (cov <= 0)
-                continue;
-            if (cov > 1) cov = 1;
-            blend_px(row + x, RGB(255, 255, 255), cov * 0.10f);
-            if (frac <= 0)
-                continue;
-            float a = atan2f(dx, -dy);
-            if (a < 0)
-                a += TAU;
-            float lead = frac >= 1 ? 1 : (span - a) * d;
-            float tail = frac >= 1 ? 1 : a * d;
-            float e = lead < tail ? lead : tail;
-            if (e <= 0)
-                continue;
-            if (e > 1) e = 1;
-            blend_px(row + x, APP_ACCENT, cov * e);
-        }
-    }
-}
-
 static void draw_face(screen *s, float frac, int off)
 {
     int fw = s->face_rc.right - s->face_rc.left, fh = s->face_rc.bottom - s->face_rc.top;
     BitBlt(s->facedc, 0, 0, fw, fh, s->facebg, 0, 0, SRCCOPY);
     GdiFlush();
-    draw_ring(s, frac);
+    paint_ring(s->facebits, fw, fh, fw / 2.0f, fh / 2.0f, (float)s->ring_r,
+        (float)s->ring_t, frac, RGB(255, 255, 255), 0.10f, APP_ACCENT);
 
     SelectObject(s->facedc, s->count_f);
     SetTextColor(s->facedc, RGB(236, 240, 246));
@@ -239,10 +155,10 @@ static void draw_pills(screen *s)
         s->pill_rc.right - s->pill_rc.left, s->pill_rc.bottom - s->pill_rc.top,
         s->pillbg, 0, 0, SRCCOPY);
     int rad = (s->skip_rc.bottom - s->skip_rc.top) / 2;
-    fill_round(s->basedc, s->skip_rc.left, s->skip_rc.top,
+    paint_round(s->basedc, s->skip_rc.left, s->skip_rc.top,
         s->skip_rc.right - s->skip_rc.left, s->skip_rc.bottom - s->skip_rc.top, rad,
         RGB(255, 255, 255), s->hot == 1 ? 60 : 30);
-    fill_round(s->basedc, s->lock_rc.left, s->lock_rc.top,
+    paint_round(s->basedc, s->lock_rc.left, s->lock_rc.top,
         s->lock_rc.right - s->lock_rc.left, s->lock_rc.bottom - s->lock_rc.top, rad,
         RGB(255, 255, 255), s->hot == 2 ? 60 : 30);
     SelectObject(s->basedc, s->btn_f);

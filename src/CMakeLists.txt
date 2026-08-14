@@ -12,6 +12,7 @@ add_executable(rest WIN32
     notify/popup.cpp
     notify/overlay.cpp
     notify/sound.cpp
+    ui/paint.cpp
 )
 
 target_include_directories(rest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
