@@ -6,8 +6,9 @@ add_executable(rest WIN32
     shell/tray.cpp
     shell/menu.cpp
     loc/strings.cpp
+    notify/notify.cpp
     notify/hello.cpp
-    ui/popup.cpp
+    notify/popup.cpp
 )
 
 target_include_directories(rest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

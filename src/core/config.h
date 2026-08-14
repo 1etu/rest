@@ -10,6 +10,7 @@ struct ctimer {
 struct config {
     int greeted;
     int interval;
+    wchar_t style[16];
     int ntimers;
     ctimer timers[CFG_MAX_TIMERS];
 };

@@ -2,7 +2,7 @@
 #include "core/config.h"
 #include <string.h>
 
-config cfg = {0, 20, 0, {}};
+config cfg = {0, 20, L"overlay", 0, {}};
 
 static wchar_t path[MAX_PATH], tmp_path[MAX_PATH];
 
@@ -91,6 +91,10 @@ void cfg_load(void)
     int iv = num_at(find(buf, "\"interval\""), 20);
     if (iv >= 1 && iv <= 1440)
         cfg.interval = iv;
+    wchar_t st[16];
+    str_at(find(buf, "\"style\""), st, 16);
+    if (st[0])
+        lstrcpyW(cfg.style, st);
 
     const char *p = find(buf, "\"timers\"");
     while (p && cfg.ntimers < CFG_MAX_TIMERS) {
@@ -111,8 +115,11 @@ void cfg_save(void)
 {
     cfg_path();
     char buf[4096];
-    int n = wsprintfA(buf, "{\n  \"greeted\": %d,\n  \"interval\": %d,\n  \"timers\": [",
-        cfg.greeted, cfg.interval);
+    char st[16];
+    WideCharToMultiByte(CP_UTF8, 0, cfg.style, -1, st, sizeof st, 0, 0);
+    int n = wsprintfA(buf,
+        "{\n  \"greeted\": %d,\n  \"interval\": %d,\n  \"style\": \"%s\",\n  \"timers\": [",
+        cfg.greeted, cfg.interval, st);
     for (int i = 0; i < cfg.ntimers; i++) {
         char lab[176];
         int m = 0;

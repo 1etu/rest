@@ -1,6 +1,6 @@
 #include "app/app.h"
 #include "core/timer.h"
-#include "ui/popup.h"
+#include "notify/popup.h"
 #include "loc/strings.h"
 #include <windowsx.h>
 #include <dwmapi.h>
