@@ -1,5 +1,6 @@
 #include "app/app.h"
 #include "core/config.h"
+#include "core/hotkeys.h"
 #include "core/timer.h"
 #include "shell/tray.h"
 #include "shell/menu.h"
@@ -37,9 +38,17 @@ static LRESULT CALLBACK wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
             timer_set_interval(HIWORD(wp));
             break;
         case CMD_SETTINGS:
-            settings_show();
+            settings_show(w);
             break;
         }
+        return 0;
+    case WM_HOTKEY:
+        if (wp == HK_BREAK)
+            timer_break_now();
+        else if (wp == HK_SKIP)
+            timer_skip();
+        else if (wp == HK_PAUSE)
+            timer_pause_toggle();
         return 0;
     case WM_DESTROY:
         tray_remove();
@@ -75,6 +84,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int)
 
     tray_add(w);
     timer_init(w);
+    hotkeys_apply(w);
 
     while (GetMessageW(&msg, 0, 0, 0)) {
         TranslateMessage(&msg);

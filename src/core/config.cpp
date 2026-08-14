@@ -29,6 +29,9 @@ static void defaults(void)
     d.from_min = 9 * 60;
     d.to_min = 18 * 60;
     d.days = 0x1f;
+    d.hk_break = (MOD_CONTROL | MOD_ALT) << 16 | 'B';
+    d.hk_skip = (MOD_CONTROL | MOD_ALT) << 16 | 'K';
+    d.hk_pause = (MOD_CONTROL | MOD_ALT) << 16 | 'P';
     cfg = d;
 }
 
@@ -194,6 +197,9 @@ void cfg_load(void)
     cfg.to_min = num_at(find(buf, "\"to\""), cfg.to_min);
     cfg.days = num_at(find(buf, "\"days\""), cfg.days);
     cfg.login = num_at(find(buf, "\"launchAtLogin\""), cfg.login);
+    cfg.hk_break = num_at(find(buf, "\"hotkeyBreak\""), cfg.hk_break);
+    cfg.hk_skip = num_at(find(buf, "\"hotkeySkip\""), cfg.hk_skip);
+    cfg.hk_pause = num_at(find(buf, "\"hotkeyPause\""), cfg.hk_pause);
 
     cfg.nfocus = list_at(find(buf, "\"focusApps\""), cfg.focus, CFG_MAX_APPS);
     cfg.nexcl = list_at(find(buf, "\"ignoreApps\""), cfg.excl, CFG_MAX_APPS);
@@ -267,6 +273,9 @@ void cfg_save(void)
     n += wsprintfA(buf + n, "  \"workHours\": %d,\n  \"from\": %d,\n  \"to\": %d,\n  \"days\": %d,\n",
         cfg.hours, cfg.from_min, cfg.to_min, cfg.days);
     n += wsprintfA(buf + n, "  \"launchAtLogin\": %d,\n", cfg.login);
+    n += wsprintfA(buf + n, "  \"hotkeyBreak\": %d,\n  \"hotkeySkip\": %d,\n",
+        cfg.hk_break, cfg.hk_skip);
+    n += wsprintfA(buf + n, "  \"hotkeyPause\": %d,\n", cfg.hk_pause);
     n += put_list(buf + n, "focusApps", cfg.focus, cfg.nfocus);
     n += put_list(buf + n, "ignoreApps", cfg.excl, cfg.nexcl);
 

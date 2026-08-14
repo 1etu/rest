@@ -3,6 +3,7 @@ add_executable(rest WIN32
     app/app.manifest
     app/app.rc
     core/config.cpp
+    core/hotkeys.cpp
     core/presence.cpp
     core/timer.cpp
     shell/tray.cpp

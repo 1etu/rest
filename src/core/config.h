@@ -37,6 +37,10 @@ struct config {
 
     int login;
 
+    int hk_break;
+    int hk_skip;
+    int hk_pause;
+
     int nfocus;
     wchar_t focus[CFG_MAX_APPS][40];
     int nexcl;

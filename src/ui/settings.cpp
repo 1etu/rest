@@ -1,6 +1,7 @@
 #include "app/app.h"
 #include "app/resource.h"
 #include "core/config.h"
+#include "core/hotkeys.h"
 #include "core/timer.h"
 #include "notify/sound.h"
 #include "ui/settings.h"
@@ -18,6 +19,7 @@
 #define R_SLIDER 4
 #define R_DAYS 5
 #define R_TIME 6
+#define R_HOTKEY 7
 
 #define WIN_W 760
 #define WIN_H 604
@@ -96,6 +98,12 @@ static row schedule_rows[] = {
     TOGGLE(STR_L_LOGIN, 0, cfg.login),
 };
 
+static row keys_rows[] = {
+    {R_HOTKEY, STR_L_HK_BREAK, 0, &cfg.hk_break, 0, 0, 0, 0, 0, 0, 0, {}, {}},
+    {R_HOTKEY, STR_L_HK_SKIP, 0, &cfg.hk_skip, 0, 0, 0, 0, 0, 0, 0, {}, {}},
+    {R_HOTKEY, STR_L_HK_PAUSE, STR_D_KEYS, &cfg.hk_pause, 0, 0, 0, 0, 0, 0, 0, {}, {}},
+};
+
 struct pane {
     int icon;
     int sid;
@@ -109,13 +117,14 @@ static pane panes[] = {
     {ICON_SOUND, STR_NAV_SOUND, sound_rows, (int)(sizeof sound_rows / sizeof sound_rows[0])},
     {ICON_SCHEDULE, STR_NAV_SCHEDULE, schedule_rows,
         (int)(sizeof schedule_rows / sizeof schedule_rows[0])},
+    {ICON_KEYS, STR_NAV_KEYS, keys_rows, (int)(sizeof keys_rows / sizeof keys_rows[0])},
 };
 
 #define NPANES ((int)(sizeof panes / sizeof panes[0]))
 static const int nav_sid[NPANES] = {STR_NAV_BREAKS, STR_NAV_NOTIFY, STR_NAV_SOUND,
-    STR_NAV_SCHEDULE};
+    STR_NAV_SCHEDULE, STR_NAV_KEYS};
 
-static HWND wnd;
+static HWND wnd, host;
 static HFONT f_nav, f_lab, f_desc, f_val, f_head, f_title;
 static int dpi, cw, chh;
 static int cur_pane, nav_hot = -1, tl_hot, row_hot = -1;
@@ -283,6 +292,9 @@ static void layout(void)
         case R_TIME:
             SetRect(&r->hit, right - S(92), cy - S(16), right, cy + S(16));
             break;
+        case R_HOTKEY:
+            SetRect(&r->hit, right - S(180), cy - S(16), right, cy + S(16));
+            break;
         default:
             SetRect(&r->hit, right - S(146), cy - S(15), right, cy + S(15));
         }
@@ -388,6 +400,24 @@ static void paint_rows(HDC dc)
         case R_TIME:
             draw_box(dc, r, edit_row == i);
             break;
+        case R_HOTKEY: {
+            int cap = edit_row == i;
+            paint_round(dc, r->hit.left, r->hit.top, r->hit.right - r->hit.left,
+                r->hit.bottom - r->hit.top, S(8), th.ctrl, 255);
+            paint_round(dc, r->hit.left, r->hit.top, r->hit.right - r->hit.left,
+                r->hit.bottom - r->hit.top, S(8), cap ? th.accent : th.border,
+                cap ? 200 : 120);
+            wchar_t hk[64];
+            if (cap)
+                lstrcpyW(hk, str(STR_HK_PRESS));
+            else
+                hotkey_name(*(int *)r->val, hk);
+            SelectObject(dc, f_val);
+            SetTextColor(dc, cap ? th.accent : th.text);
+            RECT t = {r->hit.left + S(12), r->hit.top, r->hit.right - S(12), r->hit.bottom};
+            DrawTextW(dc, hk, -1, &t, DT_SINGLELINE | DT_VCENTER | DT_CENTER | DT_NOPREFIX);
+            break;
+        }
         default:
             if (edit_row == i)
                 draw_box(dc, r, 1);
@@ -660,6 +690,9 @@ static LRESULT CALLBACK setproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
                     cfg_save();
                     InvalidateRect(m, 0, FALSE);
                 }
+            } else if (r->type == R_HOTKEY) {
+                edit_row = edit_row == i ? -1 : i;
+                InvalidateRect(m, 0, FALSE);
             } else if (r->type == R_TIME) {
                 if (edit_row != i)
                     edit_start(i);
@@ -706,6 +739,30 @@ static LRESULT CALLBACK setproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     case WM_KEYDOWN:
+        if (edit_row >= 0 && panes[cur_pane].rows[edit_row].type == R_HOTKEY) {
+            if (wp == VK_ESCAPE) {
+                edit_row = -1;
+            } else if (wp != VK_CONTROL && wp != VK_MENU && wp != VK_SHIFT &&
+                wp != VK_LWIN && wp != VK_RWIN) {
+                int mods = 0;
+                if (GetKeyState(VK_CONTROL) < 0)
+                    mods |= MOD_CONTROL;
+                if (GetKeyState(VK_MENU) < 0)
+                    mods |= MOD_ALT;
+                if (GetKeyState(VK_SHIFT) < 0)
+                    mods |= MOD_SHIFT;
+                if (wp == VK_BACK && !mods) {
+                    *(int *)panes[cur_pane].rows[edit_row].val = 0;
+                } else if (mods) {
+                    *(int *)panes[cur_pane].rows[edit_row].val = mods << 16 | (int)wp;
+                }
+                edit_row = -1;
+                cfg_save();
+                hotkeys_apply(host);
+            }
+            InvalidateRect(m, 0, FALSE);
+            return 0;
+        }
         if (edit_row >= 0 && (wp == VK_RETURN || wp == VK_ESCAPE))
             edit_commit(wp == VK_RETURN);
         return 0;
@@ -730,8 +787,9 @@ static LRESULT CALLBACK setproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
     return DefWindowProcW(m, msg, wp, lp);
 }
 
-void settings_show(void)
+void settings_show(HWND owner)
 {
+    host = owner;
     if (wnd) {
         ShowWindow(wnd, SW_RESTORE);
         SetForegroundWindow(wnd);

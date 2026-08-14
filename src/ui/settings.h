@@ -2,4 +2,4 @@
 
 
 // later implement settings popup / screen? @ settings.cpp
-void settings_show(void);
+void settings_show(HWND owner);
