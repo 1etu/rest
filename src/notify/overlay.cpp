@@ -28,29 +28,35 @@ typedef BOOL(WINAPI *swca_fn)(HWND, wca_data *);
 #define TINT_ALPHA 0xB4
 #define SLIDE_MS 380.0
 #define TAU 6.2831853f
+#define MAX_SCREENS 8
 
-static HWND wnd;
+struct screen {
+    HWND wnd;
+    HDC basedc, facedc, facebg, clockbg, pillbg;
+    HBITMAP basebmp, facebmp, facebgbmp, clockbmp, pillbmp;
+    void *facebits;
+    HFONT title_f, sub_f, count_f, small_f, btn_f;
+    RECT face_rc, clock_rc, pill_rc, skip_rc, lock_rc;
+    SYSTEMTIME last_clock;
+    int mx, my, mw, mh, dpi;
+    int cellw, colonw, cellh, ring_r, ring_t;
+    int hot;
+};
+
+static screen scr[MAX_SCREENS];
+static int nscr;
 static HHOOK khook;
 static swca_fn swca;
 static int acrylic;
-
-static HDC basedc, facedc, facebg, clockbg, pillbg;
-static HBITMAP basebmp, facebmp, facebgbmp, clockbmp, pillbmp;
-static void *facebits;
-static HFONT title_f, sub_f, count_f, small_f, btn_f;
-static int dpi, mx, my, mw, mh;
-static int cellw, colonw, cellh, ring_r, ring_t;
-static int shown_sec, total_sec, hot;
+static int shown_sec, total_sec;
 static int last_off = -9999;
 static float last_deg = -1;
 static double freq, show_t, anim_t, sec_t, esc_t;
 static wchar_t cur[8], old_[8];
-static RECT face_rc, clock_rc, pill_rc, skip_rc, lock_rc;
-static SYSTEMTIME last_clock;
 
-static int S(int v)
+static int S(screen *s, int v)
 {
-    return MulDiv(v, dpi, 96);
+    return MulDiv(v, s->dpi, 96);
 }
 
 static double now_ms(void)
@@ -60,11 +66,11 @@ static double now_ms(void)
     return t.QuadPart * 1000.0 / freq;
 }
 
-static BOOL set_acrylic(int alpha)
+static BOOL set_acrylic(HWND w, int alpha)
 {
     accent_policy ap = {ACCENT_ACRYLIC, 0, (DWORD)alpha << 24 | TINT_RGB, 0};
     wca_data d = {WCA_ACCENT_POLICY, &ap, sizeof ap};
-    return swca(wnd, &d);
+    return swca(w, &d);
 }
 
 static void fill_round(HDC dc, int x, int y, int rw, int rh, int rad, COLORREF c, int a)
@@ -131,14 +137,14 @@ static void blend_px(DWORD *p, COLORREF c, float a)
     *p = (DWORD)r << 16 | (DWORD)g << 8 | b;
 }
 
-static void draw_ring(float frac)
+static void draw_ring(screen *s, float frac)
 {
-    int fw = face_rc.right - face_rc.left, fh = face_rc.bottom - face_rc.top;
+    int fw = s->face_rc.right - s->face_rc.left, fh = s->face_rc.bottom - s->face_rc.top;
     float cx = fw / 2.0f, cy = fh / 2.0f;
-    float mid = (float)ring_r, half = ring_t / 2.0f;
+    float mid = (float)s->ring_r, half = s->ring_t / 2.0f;
     float lo = mid - half - 1, hi = mid + half + 1;
     float span = frac * TAU;
-    DWORD *bits = (DWORD *)facebits;
+    DWORD *bits = (DWORD *)s->facebits;
 
     for (int y = 0; y < fh; y++) {
         float dy = y + 0.5f - cy;
@@ -172,92 +178,99 @@ static void draw_ring(float frac)
     }
 }
 
-static void draw_face(float frac, int off)
+static void draw_face(screen *s, float frac, int off)
 {
-    int fw = face_rc.right - face_rc.left, fh = face_rc.bottom - face_rc.top;
-    BitBlt(facedc, 0, 0, fw, fh, facebg, 0, 0, SRCCOPY);
+    int fw = s->face_rc.right - s->face_rc.left, fh = s->face_rc.bottom - s->face_rc.top;
+    BitBlt(s->facedc, 0, 0, fw, fh, s->facebg, 0, 0, SRCCOPY);
     GdiFlush();
-    draw_ring(frac);
+    draw_ring(s, frac);
 
-    SelectObject(facedc, count_f);
-    SetTextColor(facedc, RGB(236, 240, 246));
-    int total = cellw * 4 + colonw;
+    SelectObject(s->facedc, s->count_f);
+    SetTextColor(s->facedc, RGB(236, 240, 246));
+    int total = s->cellw * 4 + s->colonw;
     int x = (fw - total) / 2;
-    int top = (fh - cellh) / 2;
+    int top = (fh - s->cellh) / 2;
     for (int i = 0; cur[i]; i++) {
-        int cw = cur[i] == L':' ? colonw : cellw;
-        RECT cell = {x, top, x + cw, top + cellh};
+        int cw = cur[i] == L':' ? s->colonw : s->cellw;
+        RECT cell = {x, top, x + cw, top + s->cellh};
         wchar_t s1[2] = {old_[i], 0}, s2[2] = {cur[i], 0};
-        SaveDC(facedc);
-        IntersectClipRect(facedc, cell.left, cell.top, cell.right, cell.bottom);
+        SaveDC(s->facedc);
+        IntersectClipRect(s->facedc, cell.left, cell.top, cell.right, cell.bottom);
         if (off && old_[i] && old_[i] != cur[i]) {
             RECT a = cell, b = cell;
             OffsetRect(&a, 0, -off);
-            OffsetRect(&b, 0, cellh - off);
-            DrawTextW(facedc, s1, 1, &a, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
-            DrawTextW(facedc, s2, 1, &b, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+            OffsetRect(&b, 0, s->cellh - off);
+            DrawTextW(s->facedc, s1, 1, &a,
+                DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+            DrawTextW(s->facedc, s2, 1, &b,
+                DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
         } else {
-            DrawTextW(facedc, s2, 1, &cell, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+            DrawTextW(s->facedc, s2, 1, &cell,
+                DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
         }
-        RestoreDC(facedc, -1);
+        RestoreDC(s->facedc, -1);
         x += cw;
     }
 
-    BitBlt(basedc, face_rc.left, face_rc.top, fw, fh, facedc, 0, 0, SRCCOPY);
-    if (wnd)
-        InvalidateRect(wnd, &face_rc, FALSE);
+    BitBlt(s->basedc, s->face_rc.left, s->face_rc.top, fw, fh, s->facedc, 0, 0, SRCCOPY);
+    if (s->wnd)
+        InvalidateRect(s->wnd, &s->face_rc, FALSE);
 }
 
-static void draw_clock(void)
+static void draw_clock(screen *s)
 {
-    BitBlt(basedc, clock_rc.left, clock_rc.top, clock_rc.right - clock_rc.left,
-        clock_rc.bottom - clock_rc.top, clockbg, 0, 0, SRCCOPY);
-    GetLocalTime(&last_clock);
+    BitBlt(s->basedc, s->clock_rc.left, s->clock_rc.top,
+        s->clock_rc.right - s->clock_rc.left, s->clock_rc.bottom - s->clock_rc.top,
+        s->clockbg, 0, 0, SRCCOPY);
+    GetLocalTime(&s->last_clock);
     wchar_t t[16];
-    GetTimeFormatEx(0, TIME_NOSECONDS, &last_clock, 0, t, 16);
-    SelectObject(basedc, small_f);
-    SetTextColor(basedc, RGB(150, 156, 166));
-    RECT r = clock_rc;
-    DrawTextW(basedc, t, -1, &r, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
-    if (wnd)
-        InvalidateRect(wnd, &clock_rc, FALSE);
+    GetTimeFormatEx(0, TIME_NOSECONDS, &s->last_clock, 0, t, 16);
+    SelectObject(s->basedc, s->small_f);
+    SetTextColor(s->basedc, RGB(150, 156, 166));
+    RECT r = s->clock_rc;
+    DrawTextW(s->basedc, t, -1, &r, DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
+    if (s->wnd)
+        InvalidateRect(s->wnd, &s->clock_rc, FALSE);
 }
 
-static void draw_pills(void)
+static void draw_pills(screen *s)
 {
-    BitBlt(basedc, pill_rc.left, pill_rc.top, pill_rc.right - pill_rc.left,
-        pill_rc.bottom - pill_rc.top, pillbg, 0, 0, SRCCOPY);
-    int rad = (skip_rc.bottom - skip_rc.top) / 2;
-    fill_round(basedc, skip_rc.left, skip_rc.top, skip_rc.right - skip_rc.left,
-        skip_rc.bottom - skip_rc.top, rad, RGB(255, 255, 255), hot == 1 ? 60 : 30);
-    fill_round(basedc, lock_rc.left, lock_rc.top, lock_rc.right - lock_rc.left,
-        lock_rc.bottom - lock_rc.top, rad, RGB(255, 255, 255), hot == 2 ? 60 : 30);
-    SelectObject(basedc, btn_f);
-    SetTextColor(basedc, hot == 1 ? RGB(250, 251, 253) : RGB(220, 226, 234));
-    RECT r1 = skip_rc;
-    DrawTextW(basedc, str(STR_SKIP_BREAK), -1, &r1,
+    BitBlt(s->basedc, s->pill_rc.left, s->pill_rc.top,
+        s->pill_rc.right - s->pill_rc.left, s->pill_rc.bottom - s->pill_rc.top,
+        s->pillbg, 0, 0, SRCCOPY);
+    int rad = (s->skip_rc.bottom - s->skip_rc.top) / 2;
+    fill_round(s->basedc, s->skip_rc.left, s->skip_rc.top,
+        s->skip_rc.right - s->skip_rc.left, s->skip_rc.bottom - s->skip_rc.top, rad,
+        RGB(255, 255, 255), s->hot == 1 ? 60 : 30);
+    fill_round(s->basedc, s->lock_rc.left, s->lock_rc.top,
+        s->lock_rc.right - s->lock_rc.left, s->lock_rc.bottom - s->lock_rc.top, rad,
+        RGB(255, 255, 255), s->hot == 2 ? 60 : 30);
+    SelectObject(s->basedc, s->btn_f);
+    SetTextColor(s->basedc, s->hot == 1 ? RGB(250, 251, 253) : RGB(220, 226, 234));
+    RECT r1 = s->skip_rc;
+    DrawTextW(s->basedc, str(STR_SKIP_BREAK), -1, &r1,
         DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
-    SetTextColor(basedc, hot == 2 ? RGB(250, 251, 253) : RGB(220, 226, 234));
-    RECT r2 = lock_rc;
-    DrawTextW(basedc, str(STR_LOCK), -1, &r2,
+    SetTextColor(s->basedc, s->hot == 2 ? RGB(250, 251, 253) : RGB(220, 226, 234));
+    RECT r2 = s->lock_rc;
+    DrawTextW(s->basedc, str(STR_LOCK), -1, &r2,
         DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
-    if (wnd)
-        InvalidateRect(wnd, &pill_rc, FALSE);
+    if (s->wnd)
+        InvalidateRect(s->wnd, &s->pill_rc, FALSE);
 }
 
-static void build_bg(void)
+static void build_bg(screen *s)
 {
     if (acrylic) {
-        RECT r = {0, 0, mw, mh};
-        FillRect(basedc, &r, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        RECT r = {0, 0, s->mw, s->mh};
+        FillRect(s->basedc, &r, (HBRUSH)GetStockObject(BLACK_BRUSH));
         return;
     }
 
     HDC sdc = GetDC(0);
-    BitBlt(basedc, 0, 0, mw, mh, sdc, mx, my, SRCCOPY);
+    BitBlt(s->basedc, 0, 0, s->mw, s->mh, sdc, s->mx, s->my, SRCCOPY);
     ReleaseDC(0, sdc);
 
-    int bw = mw / 12, bh2 = mh / 12;
+    int bw = s->mw / 12, bh2 = s->mh / 12;
     BITMAPV5HEADER bhh = {sizeof bhh};
     bhh.bV5Width = bw;
     bhh.bV5Height = -bh2;
@@ -265,12 +278,12 @@ static void build_bg(void)
     bhh.bV5BitCount = 32;
     bhh.bV5Compression = BI_RGB;
     void *bits;
-    HDC smalldc = CreateCompatibleDC(basedc);
+    HDC smalldc = CreateCompatibleDC(s->basedc);
     HBITMAP smallbmp = CreateDIBSection(0, (BITMAPINFO *)&bhh, DIB_RGB_COLORS, &bits, 0, 0);
     HGDIOBJ os = SelectObject(smalldc, smallbmp);
     SetStretchBltMode(smalldc, HALFTONE);
     SetBrushOrgEx(smalldc, 0, 0, 0);
-    StretchBlt(smalldc, 0, 0, bw, bh2, basedc, 0, 0, mw, mh, SRCCOPY);
+    StretchBlt(smalldc, 0, 0, bw, bh2, s->basedc, 0, 0, s->mw, s->mh, SRCCOPY);
     GdiFlush();
 
     DWORD *tmp = (DWORD *)HeapAlloc(GetProcessHeap(), 0, bw * bh2 * 4);
@@ -289,53 +302,56 @@ static void build_bg(void)
         *p = (DWORD)r << 16 | (DWORD)g << 8 | b;
     }
 
-    SetStretchBltMode(basedc, HALFTONE);
-    SetBrushOrgEx(basedc, 0, 0, 0);
-    StretchBlt(basedc, 0, 0, mw, mh, smalldc, 0, 0, bw, bh2, SRCCOPY);
+    SetStretchBltMode(s->basedc, HALFTONE);
+    SetBrushOrgEx(s->basedc, 0, 0, 0);
+    StretchBlt(s->basedc, 0, 0, s->mw, s->mh, smalldc, 0, 0, bw, bh2, SRCCOPY);
     SelectObject(smalldc, os);
     DeleteObject(smallbmp);
     DeleteDC(smalldc);
 }
 
-static void build_base(void)
+static void build_base(screen *s)
 {
-    build_bg();
-    SetBkMode(basedc, TRANSPARENT);
+    build_bg(s);
+    SetBkMode(s->basedc, TRANSPARENT);
 
-    int ty = face_rc.top - S(94), sy = face_rc.top - S(42);
-    SelectObject(basedc, title_f);
-    SetTextColor(basedc, RGB(242, 245, 250));
-    RECT tr = {0, ty - S(34), mw, ty + S(34)};
-    DrawTextW(basedc, str(STR_OVERLAY_TITLE), -1, &tr,
+    int ty = s->face_rc.top - S(s, 94), sy = s->face_rc.top - S(s, 42);
+    SelectObject(s->basedc, s->title_f);
+    SetTextColor(s->basedc, RGB(242, 245, 250));
+    RECT tr = {0, ty - S(s, 34), s->mw, ty + S(s, 34)};
+    DrawTextW(s->basedc, str(STR_OVERLAY_TITLE), -1, &tr,
         DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
 
-    SelectObject(basedc, sub_f);
-    SetTextColor(basedc, RGB(182, 190, 202));
-    RECT sr = {0, sy - S(16), mw, sy + S(16)};
-    DrawTextW(basedc, str(STR_LOOK_AWAY), -1, &sr,
+    SelectObject(s->basedc, s->sub_f);
+    SetTextColor(s->basedc, RGB(182, 190, 202));
+    RECT sr = {0, sy - S(s, 16), s->mw, sy + S(s, 16)};
+    DrawTextW(s->basedc, str(STR_LOOK_AWAY), -1, &sr,
         DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
 
-    SelectObject(basedc, small_f);
-    SetTextColor(basedc, RGB(124, 130, 141));
-    RECT hr = {0, pill_rc.bottom + S(10), mw, pill_rc.bottom + S(32)};
-    DrawTextW(basedc, str(STR_ESC_HINT), -1, &hr,
+    SelectObject(s->basedc, s->small_f);
+    SetTextColor(s->basedc, RGB(124, 130, 141));
+    RECT hr = {0, s->pill_rc.bottom + S(s, 10), s->mw, s->pill_rc.bottom + S(s, 32)};
+    DrawTextW(s->basedc, str(STR_ESC_HINT), -1, &hr,
         DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
 
-    BitBlt(facebg, 0, 0, face_rc.right - face_rc.left, face_rc.bottom - face_rc.top,
-        basedc, face_rc.left, face_rc.top, SRCCOPY);
-    BitBlt(clockbg, 0, 0, clock_rc.right - clock_rc.left,
-        clock_rc.bottom - clock_rc.top, basedc, clock_rc.left, clock_rc.top, SRCCOPY);
-    BitBlt(pillbg, 0, 0, pill_rc.right - pill_rc.left,
-        pill_rc.bottom - pill_rc.top, basedc, pill_rc.left, pill_rc.top, SRCCOPY);
+    BitBlt(s->facebg, 0, 0, s->face_rc.right - s->face_rc.left,
+        s->face_rc.bottom - s->face_rc.top, s->basedc, s->face_rc.left, s->face_rc.top,
+        SRCCOPY);
+    BitBlt(s->clockbg, 0, 0, s->clock_rc.right - s->clock_rc.left,
+        s->clock_rc.bottom - s->clock_rc.top, s->basedc, s->clock_rc.left,
+        s->clock_rc.top, SRCCOPY);
+    BitBlt(s->pillbg, 0, 0, s->pill_rc.right - s->pill_rc.left,
+        s->pill_rc.bottom - s->pill_rc.top, s->basedc, s->pill_rc.left, s->pill_rc.top,
+        SRCCOPY);
 
-    draw_clock();
-    draw_pills();
-    draw_face(1, 0);
+    draw_clock(s);
+    draw_pills(s);
+    draw_face(s, 1, 0);
 }
 
 static LRESULT CALLBACK escproc(int c, WPARAM wp, LPARAM lp)
 {
-    if (c == HC_ACTION && wnd && wp == WM_KEYDOWN &&
+    if (c == HC_ACTION && nscr && wp == WM_KEYDOWN &&
         ((KBDLLHOOKSTRUCT *)lp)->vkCode == VK_ESCAPE) {
         double now = now_ms();
         if (now - esc_t < 1200)
@@ -347,128 +363,237 @@ static LRESULT CALLBACK escproc(int c, WPARAM wp, LPARAM lp)
     return CallNextHookEx(0, c, wp, lp);
 }
 
+static void free_screen(screen *s)
+{
+    DeleteDC(s->basedc);
+    DeleteDC(s->facedc);
+    DeleteDC(s->facebg);
+    DeleteDC(s->clockbg);
+    DeleteDC(s->pillbg);
+    DeleteObject(s->basebmp);
+    DeleteObject(s->facebmp);
+    DeleteObject(s->facebgbmp);
+    DeleteObject(s->clockbmp);
+    DeleteObject(s->pillbmp);
+    DeleteObject(s->title_f);
+    DeleteObject(s->sub_f);
+    DeleteObject(s->count_f);
+    DeleteObject(s->small_f);
+    DeleteObject(s->btn_f);
+}
+
+static void tick(double t)
+{
+    if (acrylic && t - show_t < 300) {
+        float q = (float)((t - show_t) / 260.0);
+        if (q > 1) q = 1;
+        q = q * q * (3 - 2 * q);
+        int a = (int)(TINT_ALPHA * q);
+        if (a < 8) a = 8;
+        for (int i = 0; i < nscr; i++)
+            set_acrylic(scr[i].wnd, a);
+    }
+
+    int sec = timer_seconds_left();
+    if (sec != shown_sec) {
+        lstrcpyW(old_, cur);
+        wsprintfW(cur, L"%02d:%02d", sec / 60, sec % 60);
+        shown_sec = sec;
+        sec_t = anim_t = t;
+    }
+
+    float sub = (float)((t - sec_t) / 1000.0);
+    if (sub > 1) sub = 1;
+    float frac = (shown_sec - sub) / total_sec;
+    if (frac < 0) frac = 0;
+    if (frac > 1) frac = 1;
+
+    float e = (float)((t - anim_t) / SLIDE_MS);
+    float deg = frac * 360;
+    if (fabsf(deg - last_deg) < 0.2f && e >= 1 && last_off == 0)
+        return;
+
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    for (int i = 0; i < nscr; i++) {
+        screen *s = &scr[i];
+        int off = 0;
+        if (e < 1) {
+            float k = 1 - e;
+            off = (int)((1 - k * k * k) * s->cellh);
+        }
+        if (i == 0)
+            last_off = off;
+        draw_face(s, frac, off);
+        if (st.wMinute != s->last_clock.wMinute)
+            draw_clock(s);
+    }
+    last_deg = deg;
+}
+
 static LRESULT CALLBACK overlayproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
 {
+    screen *s = (screen *)GetWindowLongPtrW(m, GWLP_USERDATA);
+    if (!s)
+        return DefWindowProcW(m, msg, wp, lp);
+
     switch (msg) {
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC dc = BeginPaint(m, &ps);
         BitBlt(dc, ps.rcPaint.left, ps.rcPaint.top,
             ps.rcPaint.right - ps.rcPaint.left, ps.rcPaint.bottom - ps.rcPaint.top,
-            basedc, ps.rcPaint.left, ps.rcPaint.top, SRCCOPY);
+            s->basedc, ps.rcPaint.left, ps.rcPaint.top, SRCCOPY);
         EndPaint(m, &ps);
         return 0;
     }
     case WM_PRINTCLIENT:
-        BitBlt((HDC)wp, 0, 0, mw, mh, basedc, 0, 0, SRCCOPY);
+        BitBlt((HDC)wp, 0, 0, s->mw, s->mh, s->basedc, 0, 0, SRCCOPY);
         return 0;
     case WM_ERASEBKGND:
         return 1;
-    case WM_TIMER: {
-        double t = now_ms();
-        if (acrylic && t - show_t < 300) {
-            float q = (float)((t - show_t) / 260.0);
-            if (q > 1) q = 1;
-            q = q * q * (3 - 2 * q);
-            int a = (int)(TINT_ALPHA * q);
-            set_acrylic(a < 8 ? 8 : a);
-        }
-
-        int s = timer_seconds_left();
-        if (s != shown_sec) {
-            lstrcpyW(old_, cur);
-            wsprintfW(cur, L"%02d:%02d", s / 60, s % 60);
-            shown_sec = s;
-            sec_t = anim_t = t;
-        }
-
-        float sub = (float)((t - sec_t) / 1000.0);
-        if (sub > 1) sub = 1;
-        float frac = (shown_sec - sub) / total_sec;
-        if (frac < 0) frac = 0;
-        if (frac > 1) frac = 1;
-
-        float e = (float)((t - anim_t) / SLIDE_MS);
-        int off = 0;
-        if (e < 1) {
-            float k = 1 - e;
-            off = (int)((1 - k * k * k) * cellh);
-        }
-
-        float deg = frac * 360;
-        if (off != last_off || fabsf(deg - last_deg) >= 0.2f) {
-            last_off = off;
-            last_deg = deg;
-            draw_face(frac, off);
-        }
-
-        SYSTEMTIME st;
-        GetLocalTime(&st);
-        if (st.wMinute != last_clock.wMinute)
-            draw_clock();
+    case WM_TIMER:
+        tick(now_ms());
         return 0;
-    }
     case WM_MOUSEMOVE: {
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-        int over = PtInRect(&skip_rc, pt) ? 1 : PtInRect(&lock_rc, pt) ? 2 : 0;
-        if (over != hot) {
-            hot = over;
-            draw_pills();
+        int over = PtInRect(&s->skip_rc, pt) ? 1 : PtInRect(&s->lock_rc, pt) ? 2 : 0;
+        if (over != s->hot) {
+            s->hot = over;
+            draw_pills(s);
         }
         return 0;
     }
     case WM_SETCURSOR:
-        SetCursor(LoadCursorW(0, hot ? IDC_HAND : IDC_ARROW));
+        SetCursor(LoadCursorW(0, s->hot ? IDC_HAND : IDC_ARROW));
         return 1;
     case WM_LBUTTONUP: {
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-        if (PtInRect(&skip_rc, pt))
+        if (PtInRect(&s->skip_rc, pt))
             timer_skip();
-        else if (PtInRect(&lock_rc, pt))
+        else if (PtInRect(&s->lock_rc, pt))
             LockWorkStation();
         return 0;
     }
     case WM_MOUSEACTIVATE:
         return MA_NOACTIVATE;
-    case WM_DESTROY:
-        wnd = 0;
-        DeleteDC(basedc);
-        DeleteDC(facedc);
-        DeleteDC(facebg);
-        DeleteDC(clockbg);
-        DeleteDC(pillbg);
-        DeleteObject(basebmp);
-        DeleteObject(facebmp);
-        DeleteObject(facebgbmp);
-        DeleteObject(clockbmp);
-        DeleteObject(pillbmp);
-        DeleteObject(title_f);
-        DeleteObject(sub_f);
-        DeleteObject(count_f);
-        DeleteObject(small_f);
-        DeleteObject(btn_f);
-        return 0;
     }
     return DefWindowProcW(m, msg, wp, lp);
+}
+
+static BOOL CALLBACK add_monitor(HMONITOR mon, HDC, LPRECT, LPARAM)
+{
+    if (nscr >= MAX_SCREENS)
+        return FALSE;
+    MONITORINFO mi = {sizeof mi};
+    GetMonitorInfoW(mon, &mi);
+    screen *s = &scr[nscr++];
+    s->mx = mi.rcMonitor.left;
+    s->my = mi.rcMonitor.top;
+    s->mw = mi.rcMonitor.right - s->mx;
+    s->mh = mi.rcMonitor.bottom - s->my;
+    return TRUE;
+}
+
+static void layout(screen *s)
+{
+    HDC wdc = GetDC(s->wnd);
+    s->basedc = CreateCompatibleDC(wdc);
+    s->basebmp = CreateCompatibleBitmap(wdc, s->mw, s->mh);
+    SelectObject(s->basedc, s->basebmp);
+
+    HGDIOBJ of = SelectObject(wdc, s->count_f);
+    SIZE dz, cz;
+    GetTextExtentPoint32W(wdc, L"0", 1, &dz);
+    GetTextExtentPoint32W(wdc, L":", 1, &cz);
+    s->cellw = dz.cx + S(s, 3);
+    s->colonw = cz.cx + S(s, 2);
+    s->cellh = dz.cy;
+    SelectObject(wdc, s->btn_f);
+    SIZE bs1, bs2;
+    GetTextExtentPoint32W(wdc, str(STR_SKIP_BREAK), lstrlenW(str(STR_SKIP_BREAK)), &bs1);
+    GetTextExtentPoint32W(wdc, str(STR_LOCK), lstrlenW(str(STR_LOCK)), &bs2);
+    SelectObject(wdc, of);
+
+    s->ring_r = s->mh * 15 / 100;
+    if (s->ring_r > S(s, 150))
+        s->ring_r = S(s, 150);
+    if (s->ring_r < s->cellw * 3)
+        s->ring_r = s->cellw * 3;
+    s->ring_t = S(s, 5);
+
+    int cx = s->mw / 2, cy = s->mh * 50 / 100;
+    int fr = s->ring_r + s->ring_t + S(s, 4);
+    s->face_rc.left = cx - fr;
+    s->face_rc.right = cx + fr;
+    s->face_rc.top = cy - fr;
+    s->face_rc.bottom = cy + fr;
+
+    s->clock_rc.left = cx - S(s, 90);
+    s->clock_rc.right = cx + S(s, 90);
+    s->clock_rc.top = S(s, 38);
+    s->clock_rc.bottom = S(s, 64);
+
+    int ph = S(s, 38), py = s->face_rc.bottom + S(s, 52);
+    int w1 = bs1.cx + S(s, 44), w2 = bs2.cx + S(s, 44), gap = S(s, 14);
+    s->skip_rc.left = cx - (w1 + w2 + gap) / 2;
+    s->skip_rc.right = s->skip_rc.left + w1;
+    s->skip_rc.top = py;
+    s->skip_rc.bottom = py + ph;
+    s->lock_rc.left = s->skip_rc.right + gap;
+    s->lock_rc.right = s->lock_rc.left + w2;
+    s->lock_rc.top = py;
+    s->lock_rc.bottom = py + ph;
+    s->pill_rc.left = s->skip_rc.left - S(s, 8);
+    s->pill_rc.right = s->lock_rc.right + S(s, 8);
+    s->pill_rc.top = py - S(s, 6);
+    s->pill_rc.bottom = py + ph + S(s, 6);
+
+    int fw = s->face_rc.right - s->face_rc.left, fh = s->face_rc.bottom - s->face_rc.top;
+    BITMAPV5HEADER bh = {sizeof bh};
+    bh.bV5Width = fw;
+    bh.bV5Height = -fh;
+    bh.bV5Planes = 1;
+    bh.bV5BitCount = 32;
+    bh.bV5Compression = BI_RGB;
+    s->facedc = CreateCompatibleDC(wdc);
+    s->facebmp = CreateDIBSection(0, (BITMAPINFO *)&bh, DIB_RGB_COLORS, &s->facebits, 0, 0);
+    SelectObject(s->facedc, s->facebmp);
+    SetBkMode(s->facedc, TRANSPARENT);
+    s->facebg = CreateCompatibleDC(wdc);
+    s->facebgbmp = CreateCompatibleBitmap(wdc, fw, fh);
+    SelectObject(s->facebg, s->facebgbmp);
+    s->clockbg = CreateCompatibleDC(wdc);
+    s->clockbmp = CreateCompatibleBitmap(wdc, s->clock_rc.right - s->clock_rc.left,
+        s->clock_rc.bottom - s->clock_rc.top);
+    SelectObject(s->clockbg, s->clockbmp);
+    s->pillbg = CreateCompatibleDC(wdc);
+    s->pillbmp = CreateCompatibleBitmap(wdc, s->pill_rc.right - s->pill_rc.left,
+        s->pill_rc.bottom - s->pill_rc.top);
+    SelectObject(s->pillbg, s->pillbmp);
+    ReleaseDC(s->wnd, wdc);
 }
 
 void overlay_break(int on)
 {
     if (!on) {
-        if (!wnd)
+        if (!nscr)
             return;
-        HWND t = wnd;
-        wnd = 0;
         if (khook)
             UnhookWindowsHookEx(khook), khook = 0;
-        KillTimer(t, 1);
+        KillTimer(scr[0].wnd, 1);
         timeEndPeriod(1);
-        if (!acrylic)
-            AnimateWindow(t, 150, AW_HIDE | AW_BLEND);
-        DestroyWindow(t);
+        for (int i = 0; i < nscr; i++) {
+            if (!acrylic)
+                AnimateWindow(scr[i].wnd, 150, AW_HIDE | AW_BLEND);
+            SetWindowLongPtrW(scr[i].wnd, GWLP_USERDATA, 0);
+            DestroyWindow(scr[i].wnd);
+            free_screen(&scr[i]);
+        }
+        nscr = 0;
         return;
     }
-    if (wnd)
+    if (nscr)
         return;
 
     HINSTANCE inst = GetModuleHandleW(0);
@@ -486,111 +611,35 @@ void overlay_break(int on)
     QueryPerformanceFrequency(&f);
     freq = (double)f.QuadPart;
 
-    POINT cpt;
-    GetCursorPos(&cpt);
-    MONITORINFO mi = {sizeof mi};
-    GetMonitorInfoW(MonitorFromPoint(cpt, MONITOR_DEFAULTTONEAREST), &mi);
-    mx = mi.rcMonitor.left;
-    my = mi.rcMonitor.top;
-    mw = mi.rcMonitor.right - mx;
-    mh = mi.rcMonitor.bottom - my;
+    EnumDisplayMonitors(0, 0, add_monitor, 0);
+    if (!nscr)
+        return;
 
-    wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
-        APP_NAME L"_overlay", 0, WS_POPUP, mx, my, mw, mh, 0, 0, inst, 0);
-    dpi = GetDpiForWindow(wnd);
-    title_f = CreateFontW(-MulDiv(34, dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
-        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Light");
-    sub_f = CreateFontW(-MulDiv(14, dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
-        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Light");
-    count_f = CreateFontW(-MulDiv(48, dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
-        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Light");
-    small_f = CreateFontW(-MulDiv(10, dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
-        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-    btn_f = CreateFontW(-MulDiv(11, dpi, 72), 0, 0, 0, FW_NORMAL, 0, 0, 0,
-        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+    for (int i = 0; i < nscr; i++) {
+        screen *s = &scr[i];
+        s->wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+            APP_NAME L"_overlay", 0, WS_POPUP, s->mx, s->my, s->mw, s->mh, 0, 0, inst, 0);
+        SetWindowLongPtrW(s->wnd, GWLP_USERDATA, (LONG_PTR)s);
+        s->dpi = GetDpiForWindow(s->wnd);
+        s->hot = 0;
+        s->title_f = CreateFontW(-MulDiv(34, s->dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
+            DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Light");
+        s->sub_f = CreateFontW(-MulDiv(14, s->dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
+            DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Light");
+        s->count_f = CreateFontW(-MulDiv(48, s->dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
+            DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Light");
+        s->small_f = CreateFontW(-MulDiv(10, s->dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
+            DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+        s->btn_f = CreateFontW(-MulDiv(11, s->dpi, 72), 0, 0, 0, FW_NORMAL, 0, 0, 0,
+            DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+        layout(s);
+    }
 
-    HDC wdc = GetDC(wnd);
-    basedc = CreateCompatibleDC(wdc);
-    basebmp = CreateCompatibleBitmap(wdc, mw, mh);
-    SelectObject(basedc, basebmp);
-
-    HGDIOBJ of = SelectObject(wdc, count_f);
-    SIZE dz, cz;
-    GetTextExtentPoint32W(wdc, L"0", 1, &dz);
-    GetTextExtentPoint32W(wdc, L":", 1, &cz);
-    cellw = dz.cx + S(3);
-    colonw = cz.cx + S(2);
-    cellh = dz.cy;
-    SelectObject(wdc, btn_f);
-    SIZE bs1, bs2;
-    GetTextExtentPoint32W(wdc, str(STR_SKIP_BREAK), lstrlenW(str(STR_SKIP_BREAK)), &bs1);
-    GetTextExtentPoint32W(wdc, str(STR_LOCK), lstrlenW(str(STR_LOCK)), &bs2);
-    SelectObject(wdc, of);
-
-    ring_r = mh * 15 / 100;
-    if (ring_r > S(150))
-        ring_r = S(150);
-    if (ring_r < cellw * 3)
-        ring_r = cellw * 3;
-    ring_t = S(5);
-
-    int cx = mw / 2, cy = mh * 50 / 100;
-    int fr = ring_r + ring_t + S(4);
-    face_rc.left = cx - fr;
-    face_rc.right = cx + fr;
-    face_rc.top = cy - fr;
-    face_rc.bottom = cy + fr;
-
-    clock_rc.left = cx - S(90);
-    clock_rc.right = cx + S(90);
-    clock_rc.top = S(38);
-    clock_rc.bottom = S(64);
-
-    int ph = S(38), py = face_rc.bottom + S(52);
-    int w1 = bs1.cx + S(44), w2 = bs2.cx + S(44), gap = S(14);
-    skip_rc.left = cx - (w1 + w2 + gap) / 2;
-    skip_rc.right = skip_rc.left + w1;
-    skip_rc.top = py;
-    skip_rc.bottom = py + ph;
-    lock_rc.left = skip_rc.right + gap;
-    lock_rc.right = lock_rc.left + w2;
-    lock_rc.top = py;
-    lock_rc.bottom = py + ph;
-    pill_rc.left = skip_rc.left - S(8);
-    pill_rc.right = lock_rc.right + S(8);
-    pill_rc.top = py - S(6);
-    pill_rc.bottom = py + ph + S(6);
-
-    int fw = face_rc.right - face_rc.left, fh = face_rc.bottom - face_rc.top;
-    BITMAPV5HEADER bh = {sizeof bh};
-    bh.bV5Width = fw;
-    bh.bV5Height = -fh;
-    bh.bV5Planes = 1;
-    bh.bV5BitCount = 32;
-    bh.bV5Compression = BI_RGB;
-    facedc = CreateCompatibleDC(wdc);
-    facebmp = CreateDIBSection(0, (BITMAPINFO *)&bh, DIB_RGB_COLORS, &facebits, 0, 0);
-    SelectObject(facedc, facebmp);
-    SetBkMode(facedc, TRANSPARENT);
-    facebg = CreateCompatibleDC(wdc);
-    facebgbmp = CreateCompatibleBitmap(wdc, fw, fh);
-    SelectObject(facebg, facebgbmp);
-    clockbg = CreateCompatibleDC(wdc);
-    clockbmp = CreateCompatibleBitmap(wdc, clock_rc.right - clock_rc.left,
-        clock_rc.bottom - clock_rc.top);
-    SelectObject(clockbg, clockbmp);
-    pillbg = CreateCompatibleDC(wdc);
-    pillbmp = CreateCompatibleBitmap(wdc, pill_rc.right - pill_rc.left,
-        pill_rc.bottom - pill_rc.top);
-    SelectObject(pillbg, pillbmp);
-    ReleaseDC(wnd, wdc);
-
-    int s = timer_seconds_left();
-    total_sec = s > 0 ? s : 1;
-    wsprintfW(cur, L"%02d:%02d", s / 60, s % 60);
+    int sec = timer_seconds_left();
+    total_sec = sec > 0 ? sec : 1;
+    wsprintfW(cur, L"%02d:%02d", sec / 60, sec % 60);
     lstrcpyW(old_, cur);
-    shown_sec = s;
-    hot = 0;
+    shown_sec = sec;
     esc_t = 0;
     last_off = -9999;
     last_deg = -1;
@@ -599,19 +648,25 @@ void overlay_break(int on)
     if (!swca)
         swca = (swca_fn)GetProcAddress(GetModuleHandleW(L"user32.dll"),
             "SetWindowCompositionAttribute");
-    acrylic = swca && set_acrylic(8);
+    acrylic = swca && set_acrylic(scr[0].wnd, 8);
 
-    build_base();
+    for (int i = 0; i < nscr; i++) {
+        screen *s = &scr[i];
+        if (acrylic && i)
+            set_acrylic(s->wnd, 8);
+        build_base(s);
+        DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_ROUND;
+        DwmSetWindowAttribute(s->wnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof pref);
+        SetWindowPos(s->wnd, HWND_TOPMOST, s->mx, s->my, s->mw, s->mh,
+            SWP_NOACTIVATE | SWP_HIDEWINDOW);
+        if (acrylic)
+            SetWindowPos(s->wnd, HWND_TOPMOST, s->mx, s->my, s->mw, s->mh,
+                SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        else
+            AnimateWindow(s->wnd, 220, AW_BLEND);
+    }
 
-    DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_ROUND;
-    DwmSetWindowAttribute(wnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof pref);
-
-    SetWindowPos(wnd, HWND_TOPMOST, mx, my, mw, mh, SWP_NOACTIVATE | SWP_HIDEWINDOW);
-    if (acrylic)
-        SetWindowPos(wnd, HWND_TOPMOST, mx, my, mw, mh, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    else
-        AnimateWindow(wnd, 220, AW_BLEND);
     timeBeginPeriod(1);
-    SetTimer(wnd, 1, 8, 0);
+    SetTimer(scr[0].wnd, 1, 8, 0);
     khook = SetWindowsHookExW(WH_KEYBOARD_LL, escproc, 0, 0);
 }
