@@ -9,6 +9,9 @@ enum {
     STR_LOGIN,
     STR_QUIT,
     STR_HELLO,
+    STR_RESUME,
+    STR_PAUSED,
+    STR_ON_BREAK,
     STR_COUNT,
 };
 

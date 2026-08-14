@@ -3,7 +3,7 @@
 #include <windows.h>
 
 static const wchar_t *en[STR_COUNT] = {
-    L"Next break in 20 min",
+    L"Next break in %d min",
     L"Pause",
     L"Take a break now",
     L"Skip next break",
@@ -11,10 +11,13 @@ static const wchar_t *en[STR_COUNT] = {
     L"Launch at login",
     L"Quit",
     L"Runs in the tray — no window will open. Click the icon for the menu.",
+    L"Resume",
+    L"Paused",
+    L"Break in progress",
 };
 
 static const wchar_t *tr[STR_COUNT] = {
-    L"Sonraki mola 20 dk sonra",
+    L"Sonraki mola %d dk sonra",
     L"Duraklat",
     L"Şimdi mola ver",
     L"Sonraki molayı atla",
@@ -22,6 +25,9 @@ static const wchar_t *tr[STR_COUNT] = {
     L"Açılışta başlat",
     L"Çık",
     L"Tepside çalışır — pencere açılmaz. Menü için simgeye tıkla.",
+    L"Devam et",
+    L"Duraklatıldı",
+    L"Mola sürüyor",
 };
 
 const wchar_t *str(int id)

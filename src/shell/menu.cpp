@@ -1,4 +1,5 @@
 #include "app/app.h"
+#include "core/timer.h"
 #include "shell/menu.h"
 #include "loc/strings.h"
 #include <windowsx.h>
@@ -16,9 +17,9 @@ struct item {
 static const item items[] = {
     {0, STR_NEXT_BREAK, F_DIM},
     {0, 0, F_SEP},
-    {CMD_PAUSE, STR_PAUSE, F_DIM},
-    {CMD_BREAK, STR_BREAK_NOW, F_DIM},
-    {CMD_SKIP, STR_SKIP, F_DIM},
+    {CMD_PAUSE, STR_PAUSE, 0},
+    {CMD_BREAK, STR_BREAK_NOW, 0},
+    {CMD_SKIP, STR_SKIP, 0},
     {0, 0, F_SEP},
     {CMD_SETTINGS, STR_SETTINGS, F_DIM},
     {CMD_LOGIN, STR_LOGIN, F_DIM},
@@ -52,6 +53,21 @@ static int light_mode(void)
 static int item_h(int i)
 {
     return items[i].flags & F_SEP ? S(9) : S(30);
+}
+
+static const wchar_t *item_text(int i, wchar_t *buf)
+{
+    if (items[i].cmd == CMD_PAUSE)
+        return str(timer_paused() ? STR_RESUME : STR_PAUSE);
+    if (i == 0) {
+        if (timer_paused())
+            return str(STR_PAUSED);
+        if (timer_on_break())
+            return str(STR_ON_BREAK);
+        wsprintfW(buf, str(STR_NEXT_BREAK), timer_minutes_left());
+        return buf;
+    }
+    return str(items[i].sid);
 }
 
 static int hit(int mx, int my)
@@ -100,9 +116,10 @@ static void paint(HDC dc)
                 SelectObject(mem, op);
                 DeleteObject(hb);
             }
+            wchar_t buf[64];
             SetTextColor(mem, items[i].flags & F_DIM ? col_dim : col_text);
             RECT t = {S(16), y, w - S(16), y + ih};
-            DrawTextW(mem, str(items[i].sid), -1, &t, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            DrawTextW(mem, item_text(i, buf), -1, &t, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
         }
         y += ih;
     }
@@ -253,7 +270,8 @@ void menu_show(HWND o)
     h = S(6);
     for (int i = 0; i < N; i++) {
         if (!(items[i].flags & F_SEP)) {
-            const wchar_t *tx = str(items[i].sid);
+            wchar_t buf[64];
+            const wchar_t *tx = item_text(i, buf);
             SIZE sz;
             GetTextExtentPoint32W(dc, tx, lstrlenW(tx), &sz);
             if (sz.cx > tw)
