@@ -6,8 +6,31 @@
 #include <dwmapi.h>
 #include <math.h>
 
+struct accent_policy {
+    int state;
+    int flags;
+    DWORD gradient;
+    int anim;
+};
+
+struct wca_data {
+    int attrib;
+    void *data;
+    SIZE_T size;
+};
+
+typedef BOOL(WINAPI *swca_fn)(HWND, wca_data *);
+
+#define ACCENT_ACRYLIC 4
+#define WCA_ACCENT_POLICY 19
+#define TINT_RGB 0x1C1816
+#define TINT_ALPHA 0xB4
+
 static HWND wnd;
 static HHOOK khook;
+static swca_fn swca;
+static int acrylic;
+static DWORD show_t;
 static HDC basedc, stripbg, clockbg, pillbg;
 static HBITMAP basebmp, stripbmp, clockbmp, pillbmp;
 static HFONT title_f, sub_f, count_f, small_f, btn_f;
@@ -23,6 +46,13 @@ static SYSTEMTIME last_clock;
 static int S(int v)
 {
     return MulDiv(v, dpi, 96);
+}
+
+static BOOL set_acrylic(int alpha)
+{
+    accent_policy ap = {ACCENT_ACRYLIC, 0, (DWORD)alpha << 24 | TINT_RGB, 0};
+    wca_data d = {WCA_ACCENT_POLICY, &ap, sizeof ap};
+    return swca(wnd, &d);
 }
 
 static void fill_round(HDC dc, int x, int y, int rw, int rh, int rad, COLORREF c, int a)
@@ -144,8 +174,14 @@ static void draw_strip(DWORD dt)
         InvalidateRect(wnd, &strip_rc, FALSE);
 }
 
-static void build_base(void)
+static void build_bg(void)
 {
+    if (acrylic) {
+        RECT r = {0, 0, mw, mh};
+        FillRect(basedc, &r, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        return;
+    }
+
     HDC sdc = GetDC(0);
     BitBlt(basedc, 0, 0, mw, mh, sdc, mx, my, SRCCOPY);
     ReleaseDC(0, sdc);
@@ -174,9 +210,9 @@ static void build_base(void)
     HeapFree(GetProcessHeap(), 0, tmp);
     DWORD *p = (DWORD *)bits;
     for (int i = 0; i < bw * bh2; i++, p++) {
-        int r = ((*p >> 16) & 255) * 130 / 255;
-        int g = ((*p >> 8) & 255) * 140 / 255;
-        int b = (*p & 255) * 160 / 255 + 16;
+        int r = ((*p >> 16) & 255) * 160 / 255;
+        int g = ((*p >> 8) & 255) * 168 / 255;
+        int b = (*p & 255) * 190 / 255 + 12;
         if (b > 255)
             b = 255;
         *p = (DWORD)r << 16 | (DWORD)g << 8 | b;
@@ -188,7 +224,11 @@ static void build_base(void)
     SelectObject(smalldc, os);
     DeleteObject(smallbmp);
     DeleteDC(smalldc);
+}
 
+static void build_base(void)
+{
+    build_bg();
     SetBkMode(basedc, TRANSPARENT);
     SelectObject(basedc, title_f);
     SetTextColor(basedc, RGB(245, 247, 250));
@@ -252,6 +292,15 @@ static LRESULT CALLBACK overlayproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
     case WM_ERASEBKGND:
         return 1;
     case WM_TIMER: {
+        if (acrylic) {
+            DWORD st = GetTickCount() - show_t;
+            if (st < 300) {
+                float q = st >= 260 ? 1.0f : st / 260.0f;
+                q = q * q * (3 - 2 * q);
+                int a = (int)(TINT_ALPHA * q);
+                set_acrylic(a < 8 ? 8 : a);
+            }
+        }
         int s = timer_seconds_left();
         if (s != shown_sec) {
             lstrcpyW(old_, cur);
@@ -317,7 +366,8 @@ void overlay_break(int on)
         if (khook)
             UnhookWindowsHookEx(khook), khook = 0;
         KillTimer(t, 1);
-        AnimateWindow(t, 150, AW_HIDE | AW_BLEND);
+        if (!acrylic)
+            AnimateWindow(t, 150, AW_HIDE | AW_BLEND);
         DestroyWindow(t);
         return;
     }
@@ -424,13 +474,23 @@ void overlay_break(int on)
     hot = 0;
     esc_t = 0;
 
+    if (!swca)
+        swca = (swca_fn)GetProcAddress(GetModuleHandleW(L"user32.dll"),
+            "SetWindowCompositionAttribute");
+    acrylic = swca && set_acrylic(8);
+
     build_base();
 
     DWM_WINDOW_CORNER_PREFERENCE pref = DWMWCP_ROUND;
     DwmSetWindowAttribute(wnd, DWMWA_WINDOW_CORNER_PREFERENCE, &pref, sizeof pref);
 
     SetWindowPos(wnd, HWND_TOPMOST, mx, my, mw, mh, SWP_NOACTIVATE | SWP_HIDEWINDOW);
-    AnimateWindow(wnd, 220, AW_BLEND);
+    show_t = GetTickCount();
+    if (acrylic)
+        SetWindowPos(wnd, HWND_TOPMOST, mx, my, mw, mh,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    else
+        AnimateWindow(wnd, 220, AW_BLEND);
     SetTimer(wnd, 1, 33, 0);
     khook = SetWindowsHookExW(WH_KEYBOARD_LL, escproc, 0, 0);
 }
