@@ -222,6 +222,10 @@ static void tick(double t)
     if (mode == M_CURSOR) {
         POINT pt;
         GetCursorPos(&pt);
+        RECT self = {follow.x - S(12), follow.y - S(12), follow.x + w + S(12),
+            follow.y + h + S(12)};
+        if (PtInRect(&self, pt))
+            return;
         MONITORINFO mi = {sizeof mi};
         GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi);
         int tx = pt.x + S(18), ty = pt.y + S(18);

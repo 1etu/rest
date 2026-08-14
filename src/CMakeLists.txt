@@ -1,6 +1,7 @@
 add_executable(rest WIN32
     app/main.cpp
     app/app.manifest
+    app/app.rc
     core/config.cpp
     core/presence.cpp
     core/timer.cpp
@@ -14,6 +15,9 @@ add_executable(rest WIN32
     notify/sound.cpp
     ui/paint.cpp
     ui/icons.cpp
+    ui/theme.cpp
+    ui/dropdown.cpp
+    ui/settings.cpp
 )
 
 target_include_directories(rest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

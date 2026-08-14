@@ -49,8 +49,7 @@ static void build_items(void)
         put(CMD_INTERVAL, 0, cfg.timers[i].min, i, F_STAY);
     put(CMD_NEW_TIMER, STR_NEW_TIMER, 0, -1, F_STAY);
     put(0, 0, 0, -1, F_SEP);
-    put(CMD_SETTINGS, STR_SETTINGS, 0, -1, F_DIM);
-    put(CMD_LOGIN, STR_LOGIN, 0, -1, F_DIM);
+    put(CMD_SETTINGS, STR_SETTINGS, 0, -1, 0);
     put(0, 0, 0, -1, F_SEP);
     put(CMD_QUIT, STR_QUIT, 0, -1, 0);
 }

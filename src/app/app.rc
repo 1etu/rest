@@ -1,0 +1,4 @@
+#include "app/resource.h"
+
+IDI_APP  ICON "../../assets/rest.ico"
+IDI_TRAY ICON "../../assets/rest-tray.ico"

@@ -7,6 +7,7 @@
 #define APP_ACCENT RGB(233, 138, 60)
 
 #define WM_TRAY (WM_APP + 1)
+#define WM_DD (WM_APP + 2)
 
 enum {
     CMD_QUIT = 1,

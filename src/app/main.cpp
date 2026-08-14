@@ -3,6 +3,8 @@
 #include "core/timer.h"
 #include "shell/tray.h"
 #include "shell/menu.h"
+#include "notify/hello.h"
+#include "ui/settings.h"
 
 static LRESULT CALLBACK wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
 {
@@ -34,6 +36,9 @@ static LRESULT CALLBACK wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
         case CMD_INTERVAL:
             timer_set_interval(HIWORD(wp));
             break;
+        case CMD_SETTINGS:
+            settings_show();
+            break;
         }
         return 0;
     case WM_DESTROY:
@@ -46,6 +51,9 @@ static LRESULT CALLBACK wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int)
 {
+    HANDLE once = CreateMutexW(0, TRUE, L"Local\\" APP_NAME L"_single");
+    int running = GetLastError() == ERROR_ALREADY_EXISTS;
+
     cfg_load();
     WNDCLASSW wc = {};
     wc.lpfnWndProc = wndproc;
@@ -53,10 +61,21 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int)
     wc.lpszClassName = APP_NAME L"_main";
     RegisterClassW(&wc);
     HWND w = CreateWindowW(wc.lpszClassName, APP_NAME, 0, 0, 0, 0, 0, 0, 0, inst, 0);
+
+    MSG msg;
+    if (running) {
+        hello_show(w, HELLO_RUNNING);
+        while (GetMessageW(&msg, 0, 0, 0)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        CloseHandle(once);
+        return 0;
+    }
+
     tray_add(w);
     timer_init(w);
 
-    MSG msg;
     while (GetMessageW(&msg, 0, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
