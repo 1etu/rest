@@ -16,4 +16,5 @@ enum {
     CMD_SETTINGS,
     CMD_LOGIN,
     CMD_INTERVAL,
+    CMD_NEW_TIMER,
 };

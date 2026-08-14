@@ -14,6 +14,8 @@ enum {
     STR_ON_BREAK,
     STR_EVERY,
     STR_MIN_FMT,
+    STR_NEW_TIMER,
+    STR_TIMER_HINT,
     STR_COUNT,
 };
 

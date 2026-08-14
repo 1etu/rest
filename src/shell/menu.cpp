@@ -1,4 +1,5 @@
 #include "app/app.h"
+#include "core/config.h"
 #include "core/timer.h"
 #include "shell/menu.h"
 #include "loc/strings.h"
@@ -13,35 +14,54 @@ struct item {
     int cmd;
     int sid;
     int arg;
+    int tidx;
     UINT flags;
 };
 
-static const item items[] = {
-    {0, STR_NEXT_BREAK, 0, F_DIM},
-    {0, 0, 0, F_SEP},
-    {CMD_PAUSE, STR_PAUSE, 0, F_STAY},
-    {CMD_BREAK, STR_BREAK_NOW, 0, 0},
-    {CMD_SKIP, STR_SKIP, 0, F_STAY},
-    {0, 0, 0, F_SEP},
-    {0, STR_EVERY, 0, F_DIM},
-    {CMD_INTERVAL, STR_MIN_FMT, 15, F_STAY},
-    {CMD_INTERVAL, STR_MIN_FMT, 20, F_STAY},
-    {CMD_INTERVAL, STR_MIN_FMT, 30, F_STAY},
-    {CMD_INTERVAL, STR_MIN_FMT, 45, F_STAY},
-    {0, 0, 0, F_SEP},
-    {CMD_SETTINGS, STR_SETTINGS, 0, F_DIM},
-    {CMD_LOGIN, STR_LOGIN, 0, F_DIM},
-    {0, 0, 0, F_SEP},
-    {CMD_QUIT, STR_QUIT, 0, 0},
-};
-#define N ((int)(sizeof items / sizeof items[0]))
+static item items[24];
+static int N;
 
-static HWND wnd, owner;
+static void put(int cmd, int sid, int arg, int tidx, UINT flags)
+{
+    items[N].cmd = cmd;
+    items[N].sid = sid;
+    items[N].arg = arg;
+    items[N].tidx = tidx;
+    items[N].flags = flags;
+    N++;
+}
+
+static void build_items(void)
+{
+    static const int presets[] = {15, 20, 30, 45};
+    N = 0;
+    put(0, STR_NEXT_BREAK, 0, -1, F_DIM);
+    put(0, 0, 0, -1, F_SEP);
+    put(CMD_PAUSE, STR_PAUSE, 0, -1, F_STAY);
+    put(CMD_BREAK, STR_BREAK_NOW, 0, -1, 0);
+    put(CMD_SKIP, STR_SKIP, 0, -1, F_STAY);
+    put(0, 0, 0, -1, F_SEP);
+    put(0, STR_EVERY, 0, -1, F_DIM);
+    for (int i = 0; i < 4; i++)
+        put(CMD_INTERVAL, STR_MIN_FMT, presets[i], -1, F_STAY);
+    for (int i = 0; i < cfg.ntimers; i++)
+        put(CMD_INTERVAL, 0, cfg.timers[i].min, i, F_STAY);
+    put(CMD_NEW_TIMER, STR_NEW_TIMER, 0, -1, F_STAY);
+    put(0, 0, 0, -1, F_SEP);
+    put(CMD_SETTINGS, STR_SETTINGS, 0, -1, F_DIM);
+    put(CMD_LOGIN, STR_LOGIN, 0, -1, F_DIM);
+    put(0, 0, 0, -1, F_SEP);
+    put(CMD_QUIT, STR_QUIT, 0, -1, 0);
+}
+
+static HWND wnd, owner, prev_fg;
 static HFONT font;
 static HHOOK mhook, khook;
 static HWINEVENTHOOK fhook;
 static DWORD closed_t;
 static int dpi, w, h, hot = -1;
+static int editing, elen;
+static wchar_t ebuf[48];
 static COLORREF col_bg, col_text, col_dim, col_hot, col_sep;
 
 static int S(int v)
@@ -65,6 +85,22 @@ static int item_h(int i)
 
 static const wchar_t *item_text(int i, wchar_t *buf)
 {
+    if (items[i].cmd == CMD_NEW_TIMER) {
+        if (!editing)
+            return str(STR_NEW_TIMER);
+        if (!elen)
+            return str(STR_TIMER_HINT);
+        lstrcpyW(buf, ebuf);
+        if ((GetTickCount() >> 9) & 1)
+            lstrcatW(buf, L"_");
+        return buf;
+    }
+    if (items[i].cmd == CMD_INTERVAL && items[i].tidx >= 0) {
+        wchar_t m[16];
+        wsprintfW(m, str(STR_MIN_FMT), items[i].arg);
+        wsprintfW(buf, L"%s — %s", cfg.timers[items[i].tidx].label, m);
+        return buf;
+    }
     if (items[i].cmd == CMD_INTERVAL) {
         wsprintfW(buf, str(STR_MIN_FMT), items[i].arg);
         return buf;
@@ -132,16 +168,17 @@ static void paint(HDC dc)
             }
             wchar_t buf[64];
             int tx = S(16);
-            if (items[i].cmd == CMD_INTERVAL) {
+            if (items[i].cmd == CMD_INTERVAL || items[i].cmd == CMD_NEW_TIMER)
                 tx = S(32);
-                if (items[i].arg == timer_interval()) {
-                    SetTextColor(mem, APP_ACCENT);
-                    RECT c2 = {S(14), y, S(32), y + ih};
-                    DrawTextW(mem, L"\x2713", -1, &c2,
-                        DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
-                }
+            if (items[i].cmd == CMD_INTERVAL && items[i].arg == timer_interval()) {
+                SetTextColor(mem, APP_ACCENT);
+                RECT c2 = {S(14), y, S(32), y + ih};
+                DrawTextW(mem, L"\x2713", -1, &c2,
+                    DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
             }
-            SetTextColor(mem, items[i].flags & F_DIM ? col_dim : col_text);
+            int dim = items[i].flags & F_DIM ||
+                (items[i].cmd == CMD_NEW_TIMER && editing && !elen);
+            SetTextColor(mem, dim ? col_dim : col_text);
             RECT t = {tx, y, w - S(16), y + ih};
             DrawTextW(mem, item_text(i, buf), -1, &t, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
         }
@@ -152,6 +189,113 @@ static void paint(HDC dc)
     SelectObject(mem, obmp);
     DeleteObject(bmp);
     DeleteDC(mem);
+}
+
+static void measure(void)
+{
+    HDC dc = GetDC(wnd);
+    HGDIOBJ of = SelectObject(dc, font);
+    int tw = 0;
+    h = S(6);
+    for (int i = 0; i < N; i++) {
+        if (!(items[i].flags & F_SEP)) {
+            wchar_t buf[64];
+            const wchar_t *tx = item_text(i, buf);
+            SIZE sz;
+            GetTextExtentPoint32W(dc, tx, lstrlenW(tx), &sz);
+            if (items[i].cmd == CMD_INTERVAL || items[i].cmd == CMD_NEW_TIMER)
+                sz.cx += S(16);
+            if (sz.cx > tw)
+                tw = sz.cx;
+        }
+        h += item_h(i);
+    }
+    h += S(6);
+    w = tw + S(16) * 2;
+    if (w < S(190))
+        w = S(190);
+    SelectObject(dc, of);
+    ReleaseDC(wnd, dc);
+}
+
+static void relayout(void)
+{
+    RECT rc;
+    GetWindowRect(wnd, &rc);
+    int bottom = rc.bottom;
+    measure();
+    SetWindowPos(wnd, HWND_TOPMOST, rc.left, bottom - h, w, h, SWP_NOACTIVATE);
+    InvalidateRect(wnd, 0, FALSE);
+}
+
+static int parse_timer(const wchar_t *in, wchar_t *label, int *out)
+{
+    int b = -1, e = -1;
+    for (int i = 0; in[i]; i++)
+        if (in[i] >= '0' && in[i] <= '9') {
+            if (i == 0 || in[i - 1] < '0' || in[i - 1] > '9')
+                b = i;
+            e = i + 1;
+        }
+    if (b < 0)
+        return 0;
+    int num = 0;
+    for (int i = b; i < e; i++)
+        num = num * 10 + in[i] - '0';
+    const wchar_t *u = in + e;
+    while (*u == L' ')
+        u++;
+    wchar_t c0 = *u | 0x20, c1 = u[0] ? u[1] | 0x20 : 0;
+    int hours = c0 == L'h' || (c0 == L's' && c1 == L'a');
+    int min = hours ? num * 60 : num;
+    if (min < 1 || min > 1440)
+        return 0;
+    int n = b;
+    while (n > 0 && (in[n - 1] == L' ' || in[n - 1] == L'-' || in[n - 1] == L','))
+        n--;
+    lstrcpynW(label, in, n + 1 > 40 ? 40 : n + 1);
+    if (!label[0])
+        wsprintfW(label, str(STR_MIN_FMT), min);
+    *out = min;
+    return 1;
+}
+
+static void edit_begin(void)
+{
+    editing = 1;
+    elen = 0;
+    ebuf[0] = 0;
+    prev_fg = GetForegroundWindow();
+    SetWindowLongPtrW(wnd, GWL_EXSTYLE,
+        GetWindowLongPtrW(wnd, GWL_EXSTYLE) & ~WS_EX_NOACTIVATE);
+    SetForegroundWindow(wnd);
+    SetFocus(wnd);
+    InvalidateRect(wnd, 0, FALSE);
+}
+
+static void edit_end(int commit, int restore)
+{
+    if (!editing)
+        return;
+    if (commit && elen) {
+        wchar_t lab[40];
+        int min;
+        if (!parse_timer(ebuf, lab, &min) || cfg.ntimers >= CFG_MAX_TIMERS)
+            return;
+        lstrcpyW(cfg.timers[cfg.ntimers].label, lab);
+        cfg.timers[cfg.ntimers].min = min;
+        cfg.ntimers++;
+        cfg_save();
+    }
+    editing = 0;
+    elen = 0;
+    ebuf[0] = 0;
+    SetWindowLongPtrW(wnd, GWL_EXSTYLE,
+        GetWindowLongPtrW(wnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE);
+    if (restore && prev_fg)
+        SetForegroundWindow(prev_fg);
+    build_items();
+    relayout();
 }
 
 static void close(void)
@@ -179,7 +323,7 @@ static LRESULT CALLBACK mouseproc(int c, WPARAM wp, LPARAM lp)
 
 static LRESULT CALLBACK keyproc(int c, WPARAM wp, LPARAM lp)
 {
-    if (c == HC_ACTION && wnd && wp == WM_KEYDOWN &&
+    if (c == HC_ACTION && wnd && !editing && wp == WM_KEYDOWN &&
         ((KBDLLHOOKSTRUCT *)lp)->vkCode == VK_ESCAPE) {
         close();
         return 1;
@@ -217,8 +361,7 @@ static LRESULT CALLBACK menuproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     }
-    case WM_LBUTTONDOWN:
-    case WM_RBUTTONDOWN: {
+    case WM_LBUTTONDOWN: {
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         RECT rc;
         GetClientRect(m, &rc);
@@ -226,23 +369,63 @@ static LRESULT CALLBACK menuproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
             close();
         return 0;
     }
-    case WM_LBUTTONUP: {
+    case WM_RBUTTONDOWN: {
         int i = hit(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
-        if (i >= 0) {
-            PostMessageW(owner, WM_COMMAND, MAKEWPARAM(items[i].cmd, items[i].arg), 0);
-            if (items[i].flags & F_STAY)
-                InvalidateRect(m, 0, FALSE);
-            else
-                close();
+        if (i >= 0 && items[i].tidx >= 0) {
+            for (int j = items[i].tidx; j < cfg.ntimers - 1; j++)
+                cfg.timers[j] = cfg.timers[j + 1];
+            cfg.ntimers--;
+            cfg_save();
+            build_items();
+            relayout();
         }
         return 0;
     }
+    case WM_LBUTTONUP: {
+        int i = hit(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+        if (i < 0)
+            return 0;
+        if (items[i].cmd == CMD_NEW_TIMER) {
+            if (!editing)
+                edit_begin();
+            return 0;
+        }
+        if (editing)
+            edit_end(0, 1);
+        PostMessageW(owner, WM_COMMAND, MAKEWPARAM(items[i].cmd, items[i].arg), 0);
+        if (items[i].flags & F_STAY)
+            InvalidateRect(m, 0, FALSE);
+        else
+            close();
+        return 0;
+    }
+    case WM_CHAR:
+        if (editing) {
+            if (wp == 8 && elen)
+                ebuf[--elen] = 0;
+            else if (wp >= 32 && elen < 46) {
+                ebuf[elen++] = (wchar_t)wp;
+                ebuf[elen] = 0;
+            }
+            InvalidateRect(m, 0, FALSE);
+        }
+        return 0;
+    case WM_KEYDOWN:
+        if (editing && wp == VK_RETURN)
+            edit_end(1, 1);
+        else if (editing && wp == VK_ESCAPE)
+            edit_end(0, 1);
+        return 0;
+    case WM_KILLFOCUS:
+        edit_end(0, 0);
+        return 0;
     case WM_TIMER:
         InvalidateRect(m, 0, FALSE);
         return 0;
     case WM_MOUSEACTIVATE:
         return MA_NOACTIVATE;
     case WM_DESTROY:
+        editing = 0;
         wnd = 0;
         hooks_off();
         DeleteObject(font);
@@ -294,29 +477,8 @@ void menu_show(HWND o)
     font = CreateFontW(-MulDiv(9, dpi, 72), 0, 0, 0, FW_NORMAL, 0, 0, 0,
         DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
 
-    HDC dc = GetDC(wnd);
-    HGDIOBJ of = SelectObject(dc, font);
-    int tw = 0;
-    h = S(6);
-    for (int i = 0; i < N; i++) {
-        if (!(items[i].flags & F_SEP)) {
-            wchar_t buf[64];
-            const wchar_t *tx = item_text(i, buf);
-            SIZE sz;
-            GetTextExtentPoint32W(dc, tx, lstrlenW(tx), &sz);
-            if (items[i].cmd == CMD_INTERVAL)
-                sz.cx += S(16);
-            if (sz.cx > tw)
-                tw = sz.cx;
-        }
-        h += item_h(i);
-    }
-    h += S(6);
-    w = tw + S(16) * 2;
-    if (w < S(190))
-        w = S(190);
-    SelectObject(dc, of);
-    ReleaseDC(wnd, dc);
+    build_items();
+    measure();
 
     POINT pt;
     GetCursorPos(&pt);

@@ -10,12 +10,14 @@ static const wchar_t *en[STR_COUNT] = {
     L"Settings…",
     L"Launch at login",
     L"Quit",
-    L"Runs in the tray — no window will open. Click the icon for the menu.",
+    L"Runs in the tray, no window will open. Click the icon for the menu.",
     L"Resume",
     L"Paused",
     L"Break ends in %d s",
     L"Break every",
     L"%d min",
+    L"New timer…",
+    L"focus 3 hours",
 };
 
 static const wchar_t *tr[STR_COUNT] = {
@@ -25,13 +27,15 @@ static const wchar_t *tr[STR_COUNT] = {
     L"Sonraki molayı atla",
     L"Ayarlar…",
     L"Açılışta başlat",
-    L"Çık",
-    L"Tepside çalışır — pencere açılmaz. Menü için simgeye tıkla.",
+    L"Çıkış Yap",
+    L"Tepside çalışır, pencere açılmaz. Menü için simgeye tıkla.",
     L"Devam et",
     L"Duraklatıldı",
     L"Molanın bitmesine %d sn",
     L"Mola sıklığı",
     L"%d dk",
+    L"Yeni sayaç…",
+    L"odak 3 saat",
 };
 
 const wchar_t *str(int id)
