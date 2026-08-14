@@ -9,7 +9,7 @@ add_executable(rest WIN32
     loc/strings.cpp
     notify/notify.cpp
     notify/hello.cpp
-    notify/popup.cpp
+    notify/card.cpp
     notify/overlay.cpp
     notify/sound.cpp
     ui/paint.cpp
