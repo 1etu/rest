@@ -4,6 +4,7 @@
 #include "core/presence.h"
 #include "shell/tray.h"
 #include "notify/notify.h"
+#include "notify/sound.h"
 
 static int state = T_WORK;
 static int secs = 20 * 60;
@@ -40,13 +41,22 @@ static void start_break(void)
     reason = 0;
     tray_set_break(1);
     notify_break(1);
+    sound_play(cfg.s_start);
 }
 
 static void end_break(void)
 {
     tray_set_break(0);
     notify_break(0);
+    sound_play(cfg.s_end);
     go_work();
+}
+
+static void count_down(void)
+{
+    secs--;
+    if (cfg.warn_secs && secs == cfg.warn_secs)
+        sound_play(cfg.s_warn);
 }
 
 void timer_init(HWND w)
@@ -76,7 +86,7 @@ void timer_tick(void)
 
     if (state == T_WORK) {
         if (secs > 0) {
-            secs--;
+            count_down();
             return;
         }
         reason = cfg.smart ? presence_busy() : 0;
@@ -110,7 +120,8 @@ void timer_tick(void)
         state = T_HOLD;
         return;
     }
-    if (--secs <= 0)
+    count_down();
+    if (secs <= 0)
         start_break();
 }
 
