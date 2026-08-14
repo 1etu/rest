@@ -10,6 +10,7 @@ static const wchar_t *en[STR_COUNT] = {
     L"Settings…",
     L"Launch at login",
     L"Quit",
+    L"Runs in the tray — no window will open. Click the icon for the menu.",
 };
 
 static const wchar_t *tr[STR_COUNT] = {
@@ -20,6 +21,7 @@ static const wchar_t *tr[STR_COUNT] = {
     L"Ayarlar…",
     L"Açılışta başlat",
     L"Çık",
+    L"Tepside çalışır — pencere açılmaz. Menü için simgeye tıkla.",
 };
 
 const wchar_t *str(int id)

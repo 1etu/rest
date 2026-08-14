@@ -8,6 +8,7 @@ enum {
     STR_SETTINGS,
     STR_LOGIN,
     STR_QUIT,
+    STR_HELLO,
     STR_COUNT,
 };
 

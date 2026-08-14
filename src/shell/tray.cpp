@@ -1,8 +1,24 @@
 #include "app/app.h"
 #include "shell/tray.h"
+#include "loc/strings.h"
 #include <math.h>
 
 static NOTIFYICONDATAW nid;
+
+static int first_run(void)
+{
+    HKEY k;
+    RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\" APP_NAME, 0, 0, 0,
+        KEY_READ | KEY_WRITE, 0, &k, 0);
+    DWORD v = 0, n = sizeof v;
+    RegGetValueW(k, 0, L"greeted", RRF_RT_REG_DWORD, 0, &v, &n);
+    if (!v) {
+        DWORD one = 1;
+        RegSetValueExW(k, L"greeted", 0, REG_DWORD, (BYTE *)&one, sizeof one);
+    }
+    RegCloseKey(k);
+    return !v;
+}
 
 static int light_taskbar(void)
 {
@@ -61,6 +77,15 @@ void tray_add(HWND w)
     Shell_NotifyIconW(NIM_ADD, &nid);
     nid.uVersion = NOTIFYICON_VERSION_4;
     Shell_NotifyIconW(NIM_SETVERSION, &nid);
+
+    if (first_run()) {
+        nid.uFlags = NIF_INFO;
+        lstrcpyW(nid.szInfoTitle, APP_NAME);
+        lstrcpyW(nid.szInfo, str(STR_HELLO));
+        nid.dwInfoFlags = NIIF_INFO | NIIF_NOSOUND | NIIF_RESPECT_QUIET_TIME;
+        Shell_NotifyIconW(NIM_MODIFY, &nid);
+        nid.szInfo[0] = 0;
+    }
 }
 
 void tray_remove(void)
