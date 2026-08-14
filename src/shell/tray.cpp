@@ -1,5 +1,5 @@
-#include "app.h"
-#include "tray.h"
+#include "app/app.h"
+#include "shell/tray.h"
 #include <math.h>
 
 static NOTIFYICONDATAW nid;

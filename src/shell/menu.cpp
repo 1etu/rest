@@ -1,5 +1,5 @@
-#include "app.h"
-#include "menu.h"
+#include "app/app.h"
+#include "shell/menu.h"
 #include <windowsx.h>
 #include <dwmapi.h>
 

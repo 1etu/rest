@@ -1,6 +1,6 @@
-#include "app.h"
-#include "tray.h"
-#include "menu.h"
+#include "app/app.h"
+#include "shell/tray.h"
+#include "shell/menu.h"
 
 static LRESULT CALLBACK wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
 {
