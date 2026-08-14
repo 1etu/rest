@@ -105,7 +105,7 @@ static const wchar_t *en[STR_COUNT] = {
     L"Off",
     L"%d h",
     L"MTWTFSS",
-    L"Settings",
+    L"settings",
     L"Already running. Look for the sloth in your tray.",
     L"Custom…",
 };

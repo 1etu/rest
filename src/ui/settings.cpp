@@ -20,7 +20,7 @@
 #define R_TIME 6
 
 #define WIN_W 760
-#define WIN_H 556
+#define WIN_H 604
 #define BAR_H 44
 #define SIDE_W 176
 #define PAD 28

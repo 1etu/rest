@@ -16,9 +16,9 @@ struct shape {
 };
 
 static const shape breaks_s[] = {
-    {SH_CIRC, {12, 12, 8.4f, W}},
-    {SH_LINE, {12, 12, 12, 6.6f, W}},
-    {SH_LINE, {12, 12, 15.6f, 14.2f, W}},
+    {SH_ARC, {12, 18.34f, 11.84f, W, 302.4f, 57.6f}},
+    {SH_ARC, {12, 5.66f, 11.84f, W, 122.4f, 237.6f}},
+    {SH_CIRC, {12, 12, 2.5f, 0}},
 };
 
 static const shape notify_s[] = {
@@ -152,8 +152,15 @@ static float cover(const shape *s, float px, float py)
         float a = atan2f(ddx, -ddy) * 180 / 3.14159265f;
         if (a < 0) a += 360;
         float lo = s->v[4], hi = s->v[5];
-        if (a < lo || a > hi)
+        if (lo > hi) {
+            if (a < lo && a > hi)
+                return 0;
+            if (a < lo)
+                a += 360;
+            hi += 360;
+        } else if (a < lo || a > hi) {
             return 0;
+        }
         t = (a - lo) * d * 0.0175f;
         float u = (hi - a) * d * 0.0175f;
         if (u < t) t = u;
