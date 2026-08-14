@@ -11,20 +11,27 @@
 struct item {
     int cmd;
     int sid;
+    int arg;
     UINT flags;
 };
 
 static const item items[] = {
-    {0, STR_NEXT_BREAK, F_DIM},
-    {0, 0, F_SEP},
-    {CMD_PAUSE, STR_PAUSE, 0},
-    {CMD_BREAK, STR_BREAK_NOW, 0},
-    {CMD_SKIP, STR_SKIP, 0},
-    {0, 0, F_SEP},
-    {CMD_SETTINGS, STR_SETTINGS, F_DIM},
-    {CMD_LOGIN, STR_LOGIN, F_DIM},
-    {0, 0, F_SEP},
-    {CMD_QUIT, STR_QUIT, 0},
+    {0, STR_NEXT_BREAK, 0, F_DIM},
+    {0, 0, 0, F_SEP},
+    {CMD_PAUSE, STR_PAUSE, 0, 0},
+    {CMD_BREAK, STR_BREAK_NOW, 0, 0},
+    {CMD_SKIP, STR_SKIP, 0, 0},
+    {0, 0, 0, F_SEP},
+    {0, STR_EVERY, 0, F_DIM},
+    {CMD_INTERVAL, STR_MIN_FMT, 15, 0},
+    {CMD_INTERVAL, STR_MIN_FMT, 20, 0},
+    {CMD_INTERVAL, STR_MIN_FMT, 30, 0},
+    {CMD_INTERVAL, STR_MIN_FMT, 45, 0},
+    {0, 0, 0, F_SEP},
+    {CMD_SETTINGS, STR_SETTINGS, 0, F_DIM},
+    {CMD_LOGIN, STR_LOGIN, 0, F_DIM},
+    {0, 0, 0, F_SEP},
+    {CMD_QUIT, STR_QUIT, 0, 0},
 };
 #define N ((int)(sizeof items / sizeof items[0]))
 
@@ -57,6 +64,10 @@ static int item_h(int i)
 
 static const wchar_t *item_text(int i, wchar_t *buf)
 {
+    if (items[i].cmd == CMD_INTERVAL) {
+        wsprintfW(buf, str(STR_MIN_FMT), items[i].arg);
+        return buf;
+    }
     if (items[i].cmd == CMD_PAUSE)
         return str(timer_paused() ? STR_RESUME : STR_PAUSE);
     if (i == 0) {
@@ -117,8 +128,18 @@ static void paint(HDC dc)
                 DeleteObject(hb);
             }
             wchar_t buf[64];
+            int tx = S(16);
+            if (items[i].cmd == CMD_INTERVAL) {
+                tx = S(32);
+                if (items[i].arg == timer_interval()) {
+                    SetTextColor(mem, APP_ACCENT);
+                    RECT c2 = {S(14), y, S(32), y + ih};
+                    DrawTextW(mem, L"\x2713", -1, &c2,
+                        DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+                }
+            }
             SetTextColor(mem, items[i].flags & F_DIM ? col_dim : col_text);
-            RECT t = {S(16), y, w - S(16), y + ih};
+            RECT t = {tx, y, w - S(16), y + ih};
             DrawTextW(mem, item_text(i, buf), -1, &t, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
         }
         y += ih;
@@ -205,7 +226,7 @@ static LRESULT CALLBACK menuproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
     case WM_LBUTTONUP: {
         int i = hit(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         if (i >= 0) {
-            PostMessageW(owner, WM_COMMAND, items[i].cmd, 0);
+            PostMessageW(owner, WM_COMMAND, MAKEWPARAM(items[i].cmd, items[i].arg), 0);
             close();
         }
         return 0;
@@ -274,6 +295,8 @@ void menu_show(HWND o)
             const wchar_t *tx = item_text(i, buf);
             SIZE sz;
             GetTextExtentPoint32W(dc, tx, lstrlenW(tx), &sz);
+            if (items[i].cmd == CMD_INTERVAL)
+                sz.cx += S(16);
             if (sz.cx > tw)
                 tw = sz.cx;
         }

@@ -14,6 +14,8 @@ static const wchar_t *en[STR_COUNT] = {
     L"Resume",
     L"Paused",
     L"Break in progress",
+    L"Break every",
+    L"%d min",
 };
 
 static const wchar_t *tr[STR_COUNT] = {
@@ -28,6 +30,8 @@ static const wchar_t *tr[STR_COUNT] = {
     L"Devam et",
     L"Duraklatıldı",
     L"Mola sürüyor",
+    L"Mola sıklığı",
+    L"%d dk",
 };
 
 const wchar_t *str(int id)

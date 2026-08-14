@@ -12,6 +12,8 @@ enum {
     STR_RESUME,
     STR_PAUSED,
     STR_ON_BREAK,
+    STR_EVERY,
+    STR_MIN_FMT,
     STR_COUNT,
 };
 
