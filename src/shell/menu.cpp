@@ -1,5 +1,6 @@
 #include "app/app.h"
 #include "shell/menu.h"
+#include "loc/strings.h"
 #include <windowsx.h>
 #include <dwmapi.h>
 
@@ -8,21 +9,21 @@
 
 struct item {
     int cmd;
-    const wchar_t *text;
+    int sid;
     UINT flags;
 };
 
 static const item items[] = {
-    {0, L"Next break in 20 min", F_DIM},
+    {0, STR_NEXT_BREAK, F_DIM},
     {0, 0, F_SEP},
-    {CMD_PAUSE, L"Pause", F_DIM},
-    {CMD_BREAK, L"Take a break now", F_DIM},
-    {CMD_SKIP, L"Skip next break", F_DIM},
+    {CMD_PAUSE, STR_PAUSE, F_DIM},
+    {CMD_BREAK, STR_BREAK_NOW, F_DIM},
+    {CMD_SKIP, STR_SKIP, F_DIM},
     {0, 0, F_SEP},
-    {CMD_SETTINGS, L"Settings…", F_DIM},
-    {CMD_LOGIN, L"Launch at login", F_DIM},
+    {CMD_SETTINGS, STR_SETTINGS, F_DIM},
+    {CMD_LOGIN, STR_LOGIN, F_DIM},
     {0, 0, F_SEP},
-    {CMD_QUIT, L"Quit", 0},
+    {CMD_QUIT, STR_QUIT, 0},
 };
 #define N ((int)(sizeof items / sizeof items[0]))
 
@@ -101,7 +102,7 @@ static void paint(HDC dc)
             }
             SetTextColor(mem, items[i].flags & F_DIM ? col_dim : col_text);
             RECT t = {S(16), y, w - S(16), y + ih};
-            DrawTextW(mem, items[i].text, -1, &t, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            DrawTextW(mem, str(items[i].sid), -1, &t, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
         }
         y += ih;
     }
@@ -252,8 +253,9 @@ void menu_show(HWND o)
     h = S(6);
     for (int i = 0; i < N; i++) {
         if (!(items[i].flags & F_SEP)) {
+            const wchar_t *tx = str(items[i].sid);
             SIZE sz;
-            GetTextExtentPoint32W(dc, items[i].text, lstrlenW(items[i].text), &sz);
+            GetTextExtentPoint32W(dc, tx, lstrlenW(tx), &sz);
             if (sz.cx > tw)
                 tw = sz.cx;
         }
