@@ -29,7 +29,7 @@ static int light_taskbar(void)
     return v;
 }
 
-static HICON draw_icon(void)
+static HICON draw_icon(int brk)
 {
     int s = GetSystemMetrics(SM_CXSMICON);
     BITMAPV5HEADER bh = {sizeof bh};
@@ -42,6 +42,10 @@ static HICON draw_icon(void)
     HBITMAP bmp = CreateDIBSection(0, (BITMAPINFO *)&bh, DIB_RGB_COLORS, &bits, 0, 0);
 
     DWORD rgb = light_taskbar() ? 0x1f1f1f : 0xffffff;
+    if (brk) {
+        COLORREF ac = APP_ACCENT;
+        rgb = (DWORD)GetRValue(ac) << 16 | GetGValue(ac) << 8 | GetBValue(ac);
+    }
     float c = s / 2.0f, r = s * 0.40f, t = s * 0.16f;
     DWORD *p = (DWORD *)bits;
     for (int y = 0; y < s; y++)
@@ -72,7 +76,7 @@ void tray_add(HWND w)
     nid.uID = 1;
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_SHOWTIP;
     nid.uCallbackMessage = WM_TRAY;
-    nid.hIcon = draw_icon();
+    nid.hIcon = draw_icon(0);
     lstrcpyW(nid.szTip, APP_NAME);
     Shell_NotifyIconW(NIM_ADD, &nid);
     nid.uVersion = NOTIFYICON_VERSION_4;
@@ -80,6 +84,15 @@ void tray_add(HWND w)
 
     if (first_run())
         hello_show(w);
+}
+
+void tray_set_break(int on)
+{
+    HICON old = nid.hIcon;
+    nid.hIcon = draw_icon(on);
+    nid.uFlags = NIF_ICON;
+    Shell_NotifyIconW(NIM_MODIFY, &nid);
+    DestroyIcon(old);
 }
 
 void tray_remove(void)

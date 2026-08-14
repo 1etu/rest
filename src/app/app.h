@@ -15,4 +15,5 @@ enum {
     CMD_SKIP,
     CMD_SETTINGS,
     CMD_LOGIN,
+    CMD_INTERVAL,
 };
