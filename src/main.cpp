@@ -1,5 +1,6 @@
 #include "app.h"
 #include "tray.h"
+#include "menu.h"
 
 static LRESULT CALLBACK wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
 {
@@ -8,7 +9,7 @@ static LRESULT CALLBACK wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
         switch (LOWORD(lp)) {
         case WM_CONTEXTMENU:
         case NIN_SELECT:
-            tray_menu(w);
+            menu_show(w);
         }
         return 0;
     case WM_COMMAND:

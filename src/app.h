@@ -9,4 +9,9 @@
 
 enum {
     CMD_QUIT = 1,
+    CMD_PAUSE,
+    CMD_BREAK,
+    CMD_SKIP,
+    CMD_SETTINGS,
+    CMD_LOGIN,
 };

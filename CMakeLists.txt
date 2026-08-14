@@ -7,9 +7,10 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
 add_executable(rest WIN32
     src/main.cpp
     src/tray.cpp
+    src/menu.cpp
     src/rest.manifest
 )
 
 target_compile_definitions(rest PRIVATE UNICODE _UNICODE)
 target_compile_options(rest PRIVATE /W4 /Os)
-target_link_libraries(rest user32 shell32 gdi32 advapi32)
+target_link_libraries(rest user32 shell32 gdi32 advapi32 dwmapi)

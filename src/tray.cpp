@@ -68,14 +68,3 @@ void tray_remove(void)
     Shell_NotifyIconW(NIM_DELETE, &nid);
 }
 
-void tray_menu(HWND w)
-{
-    HMENU m = CreatePopupMenu();
-    AppendMenuW(m, MF_STRING, CMD_QUIT, L"Quit");
-    POINT pt;
-    GetCursorPos(&pt);
-    SetForegroundWindow(w);
-    TrackPopupMenu(m, TPM_RIGHTBUTTON, pt.x, pt.y, 0, w, 0);
-    PostMessageW(w, WM_NULL, 0, 0);
-    DestroyMenu(m);
-}
