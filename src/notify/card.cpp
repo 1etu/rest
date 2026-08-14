@@ -13,7 +13,7 @@
 #define M_POPUP 1
 #define M_CURSOR 2
 #define SLIDE_MS 380.0
-
+// was thinking to animate the notif card -> maybe l8
 static HWND wnd;
 static HDC basedc, facedc, facebg;
 static HBITMAP basebmp, facebmp, facebgbmp;
