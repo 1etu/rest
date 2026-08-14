@@ -233,11 +233,11 @@ static void draw_pills(void)
     fill_round(basedc, lock_rc.left, lock_rc.top, lock_rc.right - lock_rc.left,
         lock_rc.bottom - lock_rc.top, rad, RGB(255, 255, 255), hot == 2 ? 60 : 30);
     SelectObject(basedc, btn_f);
-    SetTextColor(basedc, hot == 1 ? RGB(250, 251, 253) : RGB(226, 231, 238));
+    SetTextColor(basedc, hot == 1 ? RGB(250, 251, 253) : RGB(220, 226, 234));
     RECT r1 = skip_rc;
     DrawTextW(basedc, str(STR_SKIP_BREAK), -1, &r1,
         DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
-    SetTextColor(basedc, hot == 2 ? RGB(250, 251, 253) : RGB(226, 231, 238));
+    SetTextColor(basedc, hot == 2 ? RGB(250, 251, 253) : RGB(220, 226, 234));
     RECT r2 = lock_rc;
     DrawTextW(basedc, str(STR_LOCK), -1, &r2,
         DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
@@ -302,21 +302,22 @@ static void build_base(void)
     build_bg();
     SetBkMode(basedc, TRANSPARENT);
 
+    int ty = face_rc.top - S(94), sy = face_rc.top - S(42);
     SelectObject(basedc, title_f);
-    SetTextColor(basedc, RGB(244, 246, 250));
-    RECT tr = {0, mh * 25 / 100 - S(36), mw, mh * 25 / 100 + S(36)};
+    SetTextColor(basedc, RGB(242, 245, 250));
+    RECT tr = {0, ty - S(34), mw, ty + S(34)};
     DrawTextW(basedc, str(STR_OVERLAY_TITLE), -1, &tr,
         DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
 
     SelectObject(basedc, sub_f);
-    SetTextColor(basedc, RGB(168, 176, 188));
-    RECT sr = {0, mh * 32 / 100 - S(16), mw, mh * 32 / 100 + S(16)};
+    SetTextColor(basedc, RGB(182, 190, 202));
+    RECT sr = {0, sy - S(16), mw, sy + S(16)};
     DrawTextW(basedc, str(STR_LOOK_AWAY), -1, &sr,
         DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
 
     SelectObject(basedc, small_f);
-    SetTextColor(basedc, RGB(120, 126, 136));
-    RECT hr = {0, pill_rc.bottom + S(12), mw, pill_rc.bottom + S(36)};
+    SetTextColor(basedc, RGB(124, 130, 141));
+    RECT hr = {0, pill_rc.bottom + S(10), mw, pill_rc.bottom + S(32)};
     DrawTextW(basedc, str(STR_ESC_HINT), -1, &hr,
         DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_NOPREFIX);
 
@@ -497,15 +498,15 @@ void overlay_break(int on)
     wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
         APP_NAME L"_overlay", 0, WS_POPUP, mx, my, mw, mh, 0, 0, inst, 0);
     dpi = GetDpiForWindow(wnd);
-    title_f = CreateFontW(-MulDiv(32, dpi, 72), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
-        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-    sub_f = CreateFontW(-MulDiv(13, dpi, 72), 0, 0, 0, FW_NORMAL, 0, 0, 0,
-        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-    count_f = CreateFontW(-MulDiv(46, dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
+    title_f = CreateFontW(-MulDiv(34, dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
         DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Light");
-    small_f = CreateFontW(-MulDiv(10, dpi, 72), 0, 0, 0, FW_NORMAL, 0, 0, 0,
+    sub_f = CreateFontW(-MulDiv(14, dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
+        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Light");
+    count_f = CreateFontW(-MulDiv(48, dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
+        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI Light");
+    small_f = CreateFontW(-MulDiv(10, dpi, 72), 0, 0, 0, FW_LIGHT, 0, 0, 0,
         DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
-    btn_f = CreateFontW(-MulDiv(11, dpi, 72), 0, 0, 0, FW_SEMIBOLD, 0, 0, 0,
+    btn_f = CreateFontW(-MulDiv(11, dpi, 72), 0, 0, 0, FW_NORMAL, 0, 0, 0,
         DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
 
     HDC wdc = GetDC(wnd);
@@ -533,7 +534,7 @@ void overlay_break(int on)
         ring_r = cellw * 3;
     ring_t = S(5);
 
-    int cx = mw / 2, cy = mh * 53 / 100;
+    int cx = mw / 2, cy = mh * 50 / 100;
     int fr = ring_r + ring_t + S(4);
     face_rc.left = cx - fr;
     face_rc.right = cx + fr;
@@ -545,7 +546,7 @@ void overlay_break(int on)
     clock_rc.top = S(38);
     clock_rc.bottom = S(64);
 
-    int ph = S(38), py = mh * 82 / 100;
+    int ph = S(38), py = face_rc.bottom + S(52);
     int w1 = bs1.cx + S(44), w2 = bs2.cx + S(44), gap = S(14);
     skip_rc.left = cx - (w1 + w2 + gap) / 2;
     skip_rc.right = skip_rc.left + w1;
