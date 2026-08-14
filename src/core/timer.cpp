@@ -68,9 +68,9 @@ int timer_interval(void)
     return interval_min;
 }
 
-int timer_minutes_left(void)
+int timer_seconds_left(void)
 {
-    return (secs + 59) / 60;
+    return secs;
 }
 
 int timer_paused(void)

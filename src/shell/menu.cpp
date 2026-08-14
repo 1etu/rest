@@ -73,9 +73,11 @@ static const wchar_t *item_text(int i, wchar_t *buf)
     if (i == 0) {
         if (timer_paused())
             return str(STR_PAUSED);
+        int s = timer_seconds_left();
         if (timer_on_break())
-            return str(STR_ON_BREAK);
-        wsprintfW(buf, str(STR_NEXT_BREAK), timer_minutes_left());
+            wsprintfW(buf, str(STR_ON_BREAK), s);
+        else
+            wsprintfW(buf, str(STR_NEXT_BREAK), s / 60, s % 60);
         return buf;
     }
     return str(items[i].sid);
@@ -231,6 +233,9 @@ static LRESULT CALLBACK menuproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     }
+    case WM_TIMER:
+        InvalidateRect(m, 0, FALSE);
+        return 0;
     case WM_MOUSEACTIVATE:
         return MA_NOACTIVATE;
     case WM_DESTROY:
@@ -328,6 +333,7 @@ void menu_show(HWND o)
     hot = -1;
     SetWindowPos(wnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
     ShowWindow(wnd, SW_SHOWNOACTIVATE);
+    SetTimer(wnd, 1, 250, 0);
     mhook = SetWindowsHookExW(WH_MOUSE_LL, mouseproc, 0, 0);
     khook = SetWindowsHookExW(WH_KEYBOARD_LL, keyproc, 0, 0);
     fhook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
