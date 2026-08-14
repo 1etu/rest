@@ -1,6 +1,6 @@
 #include "app/app.h"
 #include "core/config.h"
-#include <stdio.h>
+#include <string.h>
 
 config cfg = {0, 20, 0, {}};
 
@@ -111,7 +111,7 @@ void cfg_save(void)
 {
     cfg_path();
     char buf[4096];
-    int n = sprintf(buf, "{\n  \"greeted\": %d,\n  \"interval\": %d,\n  \"timers\": [",
+    int n = wsprintfA(buf, "{\n  \"greeted\": %d,\n  \"interval\": %d,\n  \"timers\": [",
         cfg.greeted, cfg.interval);
     for (int i = 0; i < cfg.ntimers; i++) {
         char lab[176];
@@ -124,10 +124,10 @@ void cfg_save(void)
             lab[m++] = u8[j];
         }
         lab[m] = 0;
-        n += sprintf(buf + n, "%s\n    {\"label\": \"%s\", \"minutes\": %d}",
+        n += wsprintfA(buf + n, "%s\n    {\"label\": \"%s\", \"minutes\": %d}",
             i ? "," : "", lab, cfg.timers[i].min);
     }
-    n += sprintf(buf + n, "%s]\n}\n", cfg.ntimers ? "\n  " : "");
+    n += wsprintfA(buf + n, "%s]\n}\n", cfg.ntimers ? "\n  " : "");
 
     HANDLE f = CreateFileW(tmp_path, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
     if (f == INVALID_HANDLE_VALUE)
