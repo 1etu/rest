@@ -18,6 +18,8 @@ static const wchar_t *en[STR_COUNT] = {
     L"%d min",
     L"New timer…",
     L"focus 3 hours",
+    L"Look at something 20 feet away",
+    L"Skip",
 };
 
 static const wchar_t *tr[STR_COUNT] = {
@@ -36,6 +38,8 @@ static const wchar_t *tr[STR_COUNT] = {
     L"%d dk",
     L"Yeni sayaç…",
     L"odak 3 saat",
+    L"6 metre uzaktaki bir şeye bak",
+    L"Atla",
 };
 
 const wchar_t *str(int id)

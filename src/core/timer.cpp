@@ -2,6 +2,7 @@
 #include "core/timer.h"
 #include "core/config.h"
 #include "shell/tray.h"
+#include "ui/popup.h"
 
 #define BREAK_SECS 20
 
@@ -25,6 +26,7 @@ void timer_tick(void)
     on_break = !on_break;
     secs = on_break ? BREAK_SECS : interval_min * 60;
     tray_set_break(on_break);
+    popup_break(on_break);
 }
 
 void timer_pause_toggle(void)
@@ -37,6 +39,7 @@ void timer_skip(void)
     on_break = 0;
     secs = interval_min * 60;
     tray_set_break(0);
+    popup_break(0);
 }
 
 void timer_break_now(void)
@@ -45,6 +48,7 @@ void timer_break_now(void)
     on_break = 1;
     secs = BREAK_SECS;
     tray_set_break(1);
+    popup_break(1);
 }
 
 void timer_set_interval(int min)

@@ -16,6 +16,8 @@ enum {
     STR_MIN_FMT,
     STR_NEW_TIMER,
     STR_TIMER_HINT,
+    STR_LOOK_AWAY,
+    STR_SKIP_SHORT,
     STR_COUNT,
 };
 
