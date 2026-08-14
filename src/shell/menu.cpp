@@ -7,6 +7,7 @@
 
 #define F_SEP 1
 #define F_DIM 2
+#define F_STAY 4
 
 struct item {
     int cmd;
@@ -18,15 +19,15 @@ struct item {
 static const item items[] = {
     {0, STR_NEXT_BREAK, 0, F_DIM},
     {0, 0, 0, F_SEP},
-    {CMD_PAUSE, STR_PAUSE, 0, 0},
+    {CMD_PAUSE, STR_PAUSE, 0, F_STAY},
     {CMD_BREAK, STR_BREAK_NOW, 0, 0},
-    {CMD_SKIP, STR_SKIP, 0, 0},
+    {CMD_SKIP, STR_SKIP, 0, F_STAY},
     {0, 0, 0, F_SEP},
     {0, STR_EVERY, 0, F_DIM},
-    {CMD_INTERVAL, STR_MIN_FMT, 15, 0},
-    {CMD_INTERVAL, STR_MIN_FMT, 20, 0},
-    {CMD_INTERVAL, STR_MIN_FMT, 30, 0},
-    {CMD_INTERVAL, STR_MIN_FMT, 45, 0},
+    {CMD_INTERVAL, STR_MIN_FMT, 15, F_STAY},
+    {CMD_INTERVAL, STR_MIN_FMT, 20, F_STAY},
+    {CMD_INTERVAL, STR_MIN_FMT, 30, F_STAY},
+    {CMD_INTERVAL, STR_MIN_FMT, 45, F_STAY},
     {0, 0, 0, F_SEP},
     {CMD_SETTINGS, STR_SETTINGS, 0, F_DIM},
     {CMD_LOGIN, STR_LOGIN, 0, F_DIM},
@@ -229,7 +230,10 @@ static LRESULT CALLBACK menuproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
         int i = hit(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         if (i >= 0) {
             PostMessageW(owner, WM_COMMAND, MAKEWPARAM(items[i].cmd, items[i].arg), 0);
-            close();
+            if (items[i].flags & F_STAY)
+                InvalidateRect(m, 0, FALSE);
+            else
+                close();
         }
         return 0;
     }
