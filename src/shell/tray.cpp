@@ -1,4 +1,5 @@
 #include "app/app.h"
+#include "core/config.h"
 #include "shell/tray.h"
 #include "notify/hello.h"
 #include <math.h>
@@ -7,17 +8,11 @@ static NOTIFYICONDATAW nid;
 
 static int first_run(void)
 {
-    HKEY k;
-    RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\" APP_NAME, 0, 0, 0,
-        KEY_READ | KEY_WRITE, 0, &k, 0);
-    DWORD v = 0, n = sizeof v;
-    RegGetValueW(k, 0, L"greeted", RRF_RT_REG_DWORD, 0, &v, &n);
-    if (!v) {
-        DWORD one = 1;
-        RegSetValueExW(k, L"greeted", 0, REG_DWORD, (BYTE *)&one, sizeof one);
-    }
-    RegCloseKey(k);
-    return !v;
+    if (cfg.greeted)
+        return 0;
+    cfg.greeted = 1;
+    cfg_save();
+    return 1;
 }
 
 static int light_taskbar(void)

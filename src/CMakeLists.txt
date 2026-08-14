@@ -1,6 +1,7 @@
 add_executable(rest WIN32
     app/main.cpp
     app/app.manifest
+    core/config.cpp
     core/timer.cpp
     shell/tray.cpp
     shell/menu.cpp

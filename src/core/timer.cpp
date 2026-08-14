@@ -1,5 +1,6 @@
 #include "app/app.h"
 #include "core/timer.h"
+#include "core/config.h"
 #include "shell/tray.h"
 
 #define BREAK_SECS 20
@@ -10,11 +11,7 @@ static int paused, on_break;
 
 void timer_init(HWND w)
 {
-    DWORD v = 0, n = sizeof v;
-    RegGetValueW(HKEY_CURRENT_USER, L"Software\\" APP_NAME, L"interval",
-        RRF_RT_REG_DWORD, 0, &v, &n);
-    if (v >= 5 && v <= 240)
-        interval_min = v;
+    interval_min = cfg.interval;
     secs = interval_min * 60;
     SetTimer(w, 1, 1000, 0);
 }
@@ -53,12 +50,8 @@ void timer_break_now(void)
 void timer_set_interval(int min)
 {
     interval_min = min;
-    DWORD v = min;
-    HKEY k;
-    RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\" APP_NAME, 0, 0, 0,
-        KEY_WRITE, 0, &k, 0);
-    RegSetValueExW(k, L"interval", 0, REG_DWORD, (BYTE *)&v, sizeof v);
-    RegCloseKey(k);
+    cfg.interval = min;
+    cfg_save();
     if (!on_break)
         secs = interval_min * 60;
 }

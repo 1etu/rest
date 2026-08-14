@@ -1,4 +1,5 @@
 #include "app/app.h"
+#include "core/config.h"
 #include "core/timer.h"
 #include "shell/tray.h"
 #include "shell/menu.h"
@@ -45,6 +46,7 @@ static LRESULT CALLBACK wndproc(HWND w, UINT m, WPARAM wp, LPARAM lp)
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int)
 {
+    cfg_load();
     WNDCLASSW wc = {};
     wc.lpfnWndProc = wndproc;
     wc.hInstance = inst;
