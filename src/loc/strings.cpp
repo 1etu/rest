@@ -12,7 +12,20 @@ static const wchar_t *en[STR_COUNT] = {
     L"Quit",
 };
 
+static const wchar_t *tr[STR_COUNT] = {
+    L"Sonraki mola 20 dk sonra",
+    L"Duraklat",
+    L"Şimdi mola ver",
+    L"Sonraki molayı atla",
+    L"Ayarlar…",
+    L"Açılışta başlat",
+    L"Çık",
+};
+
 const wchar_t *str(int id)
 {
-    return en[id];
+    static const wchar_t **tbl;
+    if (!tbl)
+        tbl = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_TURKISH ? tr : en;
+    return tbl[id];
 }
