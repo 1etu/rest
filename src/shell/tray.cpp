@@ -1,6 +1,6 @@
 #include "app/app.h"
 #include "shell/tray.h"
-#include "loc/strings.h"
+#include "notify/hello.h"
 #include <math.h>
 
 static NOTIFYICONDATAW nid;
@@ -78,14 +78,8 @@ void tray_add(HWND w)
     nid.uVersion = NOTIFYICON_VERSION_4;
     Shell_NotifyIconW(NIM_SETVERSION, &nid);
 
-    if (first_run()) {
-        nid.uFlags = NIF_INFO;
-        lstrcpyW(nid.szInfoTitle, APP_NAME);
-        lstrcpyW(nid.szInfo, str(STR_HELLO));
-        nid.dwInfoFlags = NIIF_INFO | NIIF_NOSOUND | NIIF_RESPECT_QUIET_TIME;
-        Shell_NotifyIconW(NIM_MODIFY, &nid);
-        nid.szInfo[0] = 0;
-    }
+    if (first_run())
+        hello_show(w);
 }
 
 void tray_remove(void)

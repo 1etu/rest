@@ -4,6 +4,7 @@
 #include <shellapi.h>
 
 #define APP_NAME L"rest"
+#define APP_ACCENT RGB(233, 138, 60)
 
 #define WM_TRAY (WM_APP + 1)
 
