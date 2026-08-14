@@ -2,6 +2,7 @@
 #include "core/config.h"
 #include "notify/notify.h"
 #include "notify/popup.h"
+#include "notify/overlay.h"
 
 struct notifier {
     const wchar_t *id;
@@ -10,6 +11,7 @@ struct notifier {
 
 static const notifier notifiers[] = {
     {L"popup", popup_break},
+    {L"overlay", overlay_break},
 };
 
 void notify_break(int on)
@@ -19,5 +21,5 @@ void notify_break(int on)
             notifiers[i].set(on);
             return;
         }
-    popup_break(on);
+    overlay_break(on);
 }

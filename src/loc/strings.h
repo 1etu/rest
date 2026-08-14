@@ -18,6 +18,10 @@ enum {
     STR_TIMER_HINT,
     STR_LOOK_AWAY,
     STR_SKIP_SHORT,
+    STR_OVERLAY_TITLE,
+    STR_SKIP_BREAK,
+    STR_LOCK,
+    STR_ESC_HINT,
     STR_COUNT,
 };
 

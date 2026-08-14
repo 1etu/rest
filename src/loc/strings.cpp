@@ -20,6 +20,10 @@ static const wchar_t *en[STR_COUNT] = {
     L"focus 3 hours",
     L"Look at something 20 feet away",
     L"Skip",
+    L"Rest your eyes",
+    L"Skip break",
+    L"Lock screen",
+    L"Press Esc twice to skip the break",
 };
 
 static const wchar_t *tr[STR_COUNT] = {
@@ -40,6 +44,10 @@ static const wchar_t *tr[STR_COUNT] = {
     L"odak 3 saat",
     L"6 metre uzaktaki bir şeye bak",
     L"Atla",
+    L"Gözlerini dinlendir",
+    L"Molayı atla",
+    L"Ekranı kilitle",
+    L"Molayı atlamak için iki kez Esc'ye bas",
 };
 
 const wchar_t *str(int id)
