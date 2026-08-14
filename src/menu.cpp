@@ -28,6 +28,9 @@ static const item items[] = {
 
 static HWND wnd, owner;
 static HFONT font;
+static HHOOK mhook, khook;
+static HWINEVENTHOOK fhook;
+static DWORD closed_t;
 static int dpi, w, h, hot = -1;
 static COLORREF col_bg, col_text, col_dim, col_hot, col_sep;
 
@@ -115,7 +118,44 @@ static void close(void)
         return;
     HWND t = wnd;
     wnd = 0;
+    closed_t = GetTickCount();
     DestroyWindow(t);
+}
+
+static LRESULT CALLBACK mouseproc(int c, WPARAM wp, LPARAM lp)
+{
+    if (c == HC_ACTION && wnd &&
+        (wp == WM_LBUTTONDOWN || wp == WM_RBUTTONDOWN || wp == WM_MBUTTONDOWN)) {
+        POINT pt = ((MSLLHOOKSTRUCT *)lp)->pt;
+        RECT rc;
+        GetWindowRect(wnd, &rc);
+        if (!PtInRect(&rc, pt))
+            close();
+    }
+    return CallNextHookEx(0, c, wp, lp);
+}
+
+static LRESULT CALLBACK keyproc(int c, WPARAM wp, LPARAM lp)
+{
+    if (c == HC_ACTION && wnd && wp == WM_KEYDOWN &&
+        ((KBDLLHOOKSTRUCT *)lp)->vkCode == VK_ESCAPE) {
+        close();
+        return 1;
+    }
+    return CallNextHookEx(0, c, wp, lp);
+}
+
+static void CALLBACK fgproc(HWINEVENTHOOK, DWORD, HWND hw, LONG, LONG, DWORD, DWORD)
+{
+    if (wnd && hw != wnd)
+        close();
+}
+
+static void hooks_off(void)
+{
+    if (mhook) UnhookWindowsHookEx(mhook), mhook = 0;
+    if (khook) UnhookWindowsHookEx(khook), khook = 0;
+    if (fhook) UnhookWinEvent(fhook), fhook = 0;
 }
 
 static LRESULT CALLBACK menuproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
@@ -152,13 +192,11 @@ static LRESULT CALLBACK menuproc(HWND m, UINT msg, WPARAM wp, LPARAM lp)
         }
         return 0;
     }
-    case WM_CAPTURECHANGED:
-        if (wnd && (HWND)lp != wnd)
-            close();
-        return 0;
+    case WM_MOUSEACTIVATE:
+        return MA_NOACTIVATE;
     case WM_DESTROY:
         wnd = 0;
-        ReleaseCapture();
+        hooks_off();
         DeleteObject(font);
         font = 0;
         return 0;
@@ -172,6 +210,8 @@ void menu_show(HWND o)
         close();
         return;
     }
+    if (GetTickCount() - closed_t < 400)
+        return;
     owner = o;
 
     HINSTANCE inst = GetModuleHandleW(0);
@@ -245,5 +285,8 @@ void menu_show(HWND o)
     hot = -1;
     SetWindowPos(wnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
     ShowWindow(wnd, SW_SHOWNOACTIVATE);
-    SetCapture(wnd);
+    mhook = SetWindowsHookExW(WH_MOUSE_LL, mouseproc, 0, 0);
+    khook = SetWindowsHookExW(WH_KEYBOARD_LL, keyproc, 0, 0);
+    fhook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+        0, fgproc, 0, 0, WINEVENT_OUTOFCONTEXT);
 }
