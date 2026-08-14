@@ -1,5 +1,6 @@
 #include "app/app.h"
 #include "core/config.h"
+#include "core/presence.h"
 #include "core/timer.h"
 #include "shell/menu.h"
 #include "loc/strings.h"
@@ -110,6 +111,13 @@ static const wchar_t *item_text(int i, wchar_t *buf)
     if (i == 0) {
         if (timer_paused())
             return str(STR_PAUSED);
+        if (timer_state() == T_HOLD) {
+            int r = timer_hold_reason();
+            return str(r & BUSY_MEETING ? STR_HELD_MEETING
+                : r & BUSY_FULLSCREEN   ? STR_HELD_FULLSCREEN
+                : r & BUSY_FOCUS_APP    ? STR_HELD_FOCUS
+                                        : STR_HELD);
+        }
         int s = timer_seconds_left();
         if (timer_on_break())
             wsprintfW(buf, str(STR_ON_BREAK), s);

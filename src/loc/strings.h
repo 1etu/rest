@@ -22,6 +22,10 @@ enum {
     STR_SKIP_BREAK,
     STR_LOCK,
     STR_ESC_HINT,
+    STR_HELD_MEETING,
+    STR_HELD_FULLSCREEN,
+    STR_HELD_FOCUS,
+    STR_HELD,
     STR_COUNT,
 };
 

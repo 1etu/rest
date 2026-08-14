@@ -24,6 +24,10 @@ static const wchar_t *en[STR_COUNT] = {
     L"Skip break",
     L"Lock screen",
     L"Press Esc twice to skip the break",
+    L"Waiting — you're in a call",
+    L"Waiting — fullscreen app",
+    L"Waiting — focus app",
+    L"Waiting — you look busy",
 };
 
 static const wchar_t *tr[STR_COUNT] = {
@@ -48,6 +52,10 @@ static const wchar_t *tr[STR_COUNT] = {
     L"Molayı atla",
     L"Ekranı kilitle",
     L"Molayı atlamak için iki kez Esc'ye bas",
+    L"Bekliyor — görüşmedesin",
+    L"Bekliyor — tam ekran uygulama",
+    L"Bekliyor — odak uygulaması",
+    L"Bekliyor — meşgul görünüyorsun",
 };
 
 const wchar_t *str(int id)
