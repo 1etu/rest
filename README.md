@@ -31,14 +31,6 @@ away from the keyboard it counts that as a real break and quietly resets. a stuc
 app can never cancel your breaks forever, there is a ceiling on how long a break can
 be held.
 
-when a break does arrive you choose how loud it is. a fullscreen overlay that blurs
-the desktop on every monitor, a small notification in the corner you pick, a centred
-popup, or a card that follows your cursor. sounds are generated in code so nothing
-ships as an audio file, and you can point it at your own wav instead.
-
-it is one executable, raw win32, no runtime to install, no installer, no telemetry,
-no background service. idle memory sits around 11 mb and a break costs about a
-tenth of a percent of one core.
 
 <p align="center">
   <img src="docs/settings.png" width="720" alt="settings">
